@@ -1,0 +1,183 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  /* 3Dビューでスクロールバーが出ないように */
+  font-family: Arial, sans-serif;
+  background-color: #1e1e1e;
+  /* 全体の背景色 */
+  color: #f0f0f0;
+  /* 基本の文字色 */
+  display: flex;
+  flex-direction: column;
+  /* UIを下に配置するため */
+  align-items: center;
+  height: 100vh;
+}
+
+#container {
+  width: 100%;
+  flex-grow: 1;
+  /* 描画領域ができるだけ高さを取るように */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#ui {
+  padding: 10px;
+  background-color: rgba(40, 40, 40, 0.85);
+  /* UI部分の背景 */
+  border-top: 1px solid #555;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  position: fixed;
+  /* 画面下部に固定 */
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  /* 他の要素より手前に */
+}
+
+.control-group {
+  margin-bottom: 8px;
+}
+
+.control-group:last-child {
+  margin-bottom: 0;
+}
+
+/* ★ 言語選択ボタンのグループ用のスタイルを追加 */
+.language-controls {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #555;
+  /* 他のコントロールグループとの区切り線 */
+}
+
+#ui button {
+  background-color: #4CAF50;
+  /* Green */
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+}
+
+#ui button:hover {
+  background-color: #45a049;
+}
+
+/* ★ 言語選択ボタンに少し異なるスタイルを適用したい場合は、以下のように指定できます */
+/*
+.language-controls button {
+  background-color: #007bff; // 例えば青色に
+  padding: 6px 12px; // 少し小さめに
+}
+.language-controls button:hover {
+  background-color: #0056b3;
+}
+*/
+
+#status {
+  margin-top: 10px;
+  font-size: 16px;
+  color: #f0f0f0;
+  /* ステータス文字色 */
+  min-height: 20px;
+  /* メッセージがない時も高さを確保 */
+}
+
+
+/* Modal Styles */
+.modal {
+  position: fixed;
+  /* Stay in place */
+  z-index: 100;
+  /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 100%;
+  /* Full width */
+  height: 100%;
+  /* Full height */
+  overflow: auto;
+  /* Enable scroll if needed */
+  background-color: rgba(0, 0, 0, 0.7);
+  /* Black w/ opacity */
+  display: flex;
+  /* Used for centering */
+  align-items: center;
+  /* Used for centering */
+  justify-content: center;
+  /* Used for centering */
+}
+
+.modal-content {
+  background-color: #282c34;
+  /* Darker background for modal */
+  color: #f1f1f1;
+  /* Light text color */
+  margin: auto;
+  padding: 25px;
+  border: 1px solid #555;
+  width: 80%;
+  max-width: 600px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+  animation-name: animatetop;
+  animation-duration: 0.4s;
+  position: relative;
+  /* For close button positioning */
+}
+
+/* Add Animation */
+@keyframes animatetop {
+  from {
+    top: -100px;
+    opacity: 0
+  }
+
+  to {
+    top: 0;
+    opacity: 1
+  }
+}
+
+.close-button {
+  color: #aaa;
+  position: absolute;
+  /* Changed from float for better control */
+  top: 10px;
+  right: 15px;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  color: #61dafb;
+}
+
+.modal-content p,
+.modal-content li {
+  line-height: 1.6;
+}
+
+.modal-content strong {
+  color: #ffc107;
+}
