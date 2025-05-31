@@ -1,42 +1,92 @@
 body {
   margin: 0;
   overflow: hidden;
-  /* 3Dビューでスクロールバーが出ないように */
   font-family: Arial, sans-serif;
   background-color: #1e1e1e;
-  /* 全体の背景色 */
   color: #f0f0f0;
-  /* 基本の文字色 */
-  display: flex;
-  flex-direction: column;
-  /* UIを下に配置するため */
-  align-items: center;
   height: 100vh;
+  display: flex;
+  /* ★ ADDED: flexboxで中央揃え */
+  justify-content: center;
+  /* ★ ADDED: 水平中央揃え */
+  align-items: center;
+  /* ★ ADDED: 垂直中央揃え */
 }
 
 #container {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  flex-grow: 1;
-  /* 描画領域ができるだけ高さを取るように */
+  height: 100%;
+  z-index: 1;
+}
+
+/* ★ MODIFIED: メニュースタイルの調整 */
+.menu {
+  position: relative;
+  z-index: 100;
+  background-color: rgba(40, 40, 40, 0.9);
+  padding: 30px 40px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.menu h1 {
+  margin: 0 0 10px 0;
+  color: #61dafb;
+  font-size: 2.5em;
+}
+
+.menu .control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.menu label {
+  font-size: 1em;
+}
+
+.menu select,
+.menu button {
+  font-size: 16px;
+  padding: 10px 20px;
+  border-radius: 5px;
+  border: 1px solid #555;
+  background-color: #333;
+  color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#startGameButton {
+  background-color: #4CAF50;
+  cursor: pointer;
+  border: none;
+  margin-top: 10px;
+}
+
+#startGameButton:hover {
+  background-color: #45a049;
 }
 
 #ui {
   padding: 10px;
   background-color: rgba(40, 40, 40, 0.85);
-  /* UI部分の背景 */
   border-top: 1px solid #555;
   width: 100%;
   box-sizing: border-box;
   text-align: center;
   position: fixed;
-  /* 画面下部に固定 */
   bottom: 0;
   left: 0;
   z-index: 10;
-  /* 他の要素より手前に */
 }
 
 .control-group {
@@ -49,7 +99,6 @@ body {
 
 #ui button {
   background-color: #4CAF50;
-  /* Green */
   border: none;
   color: white;
   padding: 8px 16px;
@@ -67,45 +116,35 @@ body {
   background-color: #45a049;
 }
 
+#ui button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
 #status {
   margin-top: 10px;
   font-size: 16px;
   color: #f0f0f0;
-  /* ステータス文字色 */
   min-height: 20px;
-  /* メッセージがない時も高さを確保 */
 }
 
-
-/* Modal Styles */
 .modal {
   position: fixed;
-  /* Stay in place */
-  z-index: 100;
-  /* Sit on top */
+  z-index: 200;
   left: 0;
   top: 0;
   width: 100%;
-  /* Full width */
   height: 100%;
-  /* Full height */
   overflow: auto;
-  /* Enable scroll if needed */
   background-color: rgba(0, 0, 0, 0.7);
-  /* Black w/ opacity */
   display: flex;
-  /* Used for centering */
   align-items: center;
-  /* Used for centering */
   justify-content: center;
-  /* Used for centering */
 }
 
 .modal-content {
   background-color: #282c34;
-  /* Darker background for modal */
   color: #f1f1f1;
-  /* Light text color */
   margin: auto;
   padding: 25px;
   border: 1px solid #555;
@@ -116,10 +155,8 @@ body {
   animation-name: animatetop;
   animation-duration: 0.4s;
   position: relative;
-  /* For close button positioning */
 }
 
-/* Add Animation */
 @keyframes animatetop {
   from {
     top: -100px;
@@ -135,7 +172,6 @@ body {
 .close-button {
   color: #aaa;
   position: absolute;
-  /* Changed from float for better control */
   top: 10px;
   right: 15px;
   font-size: 28px;
@@ -163,8 +199,42 @@ body {
   color: #ffc107;
 }
 
-/* ★ ADDED: スタイルを無効化されたボタンに適用 */
-#ui button:disabled {
-  background-color: #555;
-  cursor: not-allowed;
+/* --- ADDED: Confirmation Modal Styles --- */
+.confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  /* Align buttons to the right */
+  gap: 15px;
+  /* Space between buttons */
+  margin-top: 25px;
+}
+
+.confirm-buttons button {
+  width: auto;
+  /* Override default full-width */
+  padding: 10px 25px;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 5px;
+  border: none;
+  color: white;
+  box-sizing: content-box;
+}
+
+#confirmYes {
+  background-color: #4CAF50;
+  /* Green for Yes */
+}
+
+#confirmYes:hover {
+  background-color: #45a049;
+}
+
+#confirmNo {
+  background-color: #f44336;
+  /* Red for No */
+}
+
+#confirmNo:hover {
+  background-color: #da190b;
 }

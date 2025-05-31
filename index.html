@@ -4,24 +4,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gravity Shift 3D - Rotating Cube</title>
+  <title>Gravity Shift 3D</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
   <div id="container"></div>
 
-  <div id="ui">
+  <div id="menuContainer" class="menu">
+    <h1>Gravity Shift 3D</h1>
+    <div class="control-group">
+      <label for="gameModeSelector">Game Mode:</label>
+      <select id="gameModeSelector">
+        <option value="classic">Classic (4x4, 4-to-win)</option>
+        <option value="tinyCube">Tiny Cube (3x3, 3-to-win)</option>
+        <option value="shiftMania">Shift Mania</option>
+        <option value="noShift">No-Shift</option>
+        <option value="expert">Expert (Shift & Place)</option>
+      </select>
+    </div>
+    <button id="startGameButton">Start Game</button>
+  </div>
+
+  <div id="ui" style="display: none;">
     <div class="control-group">
       <strong>Rotate Cube:</strong>
-      <button id="btnRollLeft" onclick="rotateWorld(new THREE.Vector3(0, 0, 1), Math.PI / 2)">←</button>
-      <button id="btnRollRight" onclick="rotateWorld(new THREE.Vector3(0, 0, 1), -Math.PI / 2)">→</button>
-      <button id="btnTiltFwd" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), -Math.PI / 2)">↑</button>
-      <button id="btnTiltBack" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), Math.PI / 2)">↓</button>
-      <button id="btnFlip" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), Math.PI)">↕</button>
+      <button id="btnRollLeft">←</button>
+      <button id="btnRollRight">→</button>
+      <button id="btnTiltFwd">↑</button>
+      <button id="btnTiltBack">↓</button>
+      <button id="btnFlip">↕</button>
     </div>
     <div class="control-group">
-      <button id="resetButton">Reset Game</button>
+      <button id="backToMenuButton">Back to Menu</button>
+      <button id="resetGameButton">Reset Game</button>
       <button id="resetViewButton">Reset View</button>
       <button id="undoButton">Undo Move</button>
       <button id="instructionsButton">Show Instructions</button>
@@ -33,66 +49,39 @@
     <div class="modal-content">
       <span class="close-button" onclick="toggleInstructions(false)">&times;</span>
       <h2>Game Instructions</h2>
-      <p><strong>Objective:</strong> Be the first player to get 4 of your pieces in a row - horizontally, vertically, or
-        diagonally in any 3D plane.</p>
-
+      <p><strong>Objective:</strong> Be the first player to get enough of your pieces in a row to win.</p>
       <h3>How to Play</h3>
       <ul>
-        <li>Players take turns placing their pieces (Red or Blue) into the 4x4x4 grid.</li>
-        <li>On your turn, hover your mouse over the grid. A highlighted column and a preview sphere will show where your
-          piece will be placed if you click.</li>
-        <li><strong>Two-Step Placement:</strong>
-          <ol>
-            <li>Click once on a highlighted column to select it as your placement target. The column and preview sphere
-              will remain fixed.</li>
-            <li>Click again on the same highlighted column to confirm and place your piece.</li>
-            <li>If you click a different valid column after the first click, your selection will change to the new
-              column.</li>
-            <li>If you click an invalid area after the first click, your selection will be cancelled.</li>
-          </ol>
-        </li>
+        <li>Select a game mode from the main menu and press "Start Game".</li>
+        <li>Players take turns placing their pieces (Red or Blue) into the grid.</li>
+        <li><strong>Two-Step Placement:</strong> Click once on a valid column to select it, then click again to confirm
+          and place your piece.</li>
         <li><strong>Rotate Cube (Gravity Shift):</strong> Use the "Rotate Cube" buttons to change the direction of
-          gravity. This will
-          cause all pieces on the board to shift according to the new "down" direction. This is a powerful strategic
-          move.</li>
+          gravity. This will cause all pieces on the board to shift.</li>
       </ul>
-
-      <h3>Game Balance &amp; Strategy</h3>
-      <p>
-        The rules for gravity shifting have been carefully balanced to make the game more strategic:
-      </p>
-      <ul>
-        <li>
-          <strong>3 Shifts per Game:</strong> You have three shifts in total. This number is small enough to make each
-          use a critical decision, but large enough to allow for flexibility in your strategy throughout the early,
-          middle, and late game.
-        </li>
-        <li>
-          <strong>2-Turn Cooldown:</strong> After shifting, you must wait for two of your own turns before you can shift
-          again. This forces you to commit to the new gravity direction and play through the consequences, preventing
-          constant, chaotic changes to the board.
-        </li>
-        <li>
-          <strong>Shift Replaces Placement:</strong> Using a shift costs your entire turn; you cannot place a piece.
-          This makes the decision to shift a significant trade-off between altering the board and developing your
-          position.
-        </li>
-      </ul>
-
       <h3>Controls</h3>
       <ul>
         <li><strong>Mouse Drag:</strong> Click and drag to rotate your view of the cube.</li>
         <li><strong>Reset View:</strong> Returns your camera view to the default starting position.</li>
-        <li><strong>Undo Move:</strong> Reverts the last move (either placing a piece or shifting gravity).</li>
-        <li><strong>Reset Game:</strong> Clears the board and starts a new game.</li>
+        <li><strong>Undo Move:</strong> Reverts the last move.</li>
+        <li><strong>Back to Menu:</strong> Ends the current game and returns to the main menu.</li>
       </ul>
       <p>Good luck!</p>
     </div>
   </div>
 
+  <div id="confirmModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <p id="confirmMessage">Are you sure?</p>
+      <div class="confirm-buttons">
+        <button id="confirmYes">Yes</button>
+        <button id="confirmNo">No</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
   <script src="game.js"></script>
 </body>
 

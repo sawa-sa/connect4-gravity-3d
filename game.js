@@ -1,65 +1,93 @@
-// --- 定数とグローバル変数 ---
-const GRID = 4;
-const INITIAL_SHIFTS = 3;
-const SHIFT_COOLDOWN_TURNS = 2;
-let shiftCounts = {};
-let shiftCooldowns = {};
+// --- ゲームモード設定 ---
+const gameModes = {
+  classic: {
+    name: "Classic (4x4, 4-to-win)",
+    gridSize: 4,
+    winLength: 4,
+    initialShifts: 3,
+    shiftCooldown: 2,
+    shiftEndsTurn: true,
+  },
+  tinyCube: {
+    name: "Tiny Cube (3x3, 3-to-win)",
+    gridSize: 3,
+    winLength: 3,
+    initialShifts: 2,
+    shiftCooldown: 1,
+    shiftEndsTurn: true,
+  },
+  shiftMania: {
+    name: "Shift Mania",
+    gridSize: 4,
+    winLength: 4,
+    initialShifts: 10,
+    shiftCooldown: 0,
+    shiftEndsTurn: true,
+  },
+  noShift: {
+    name: "No-Shift",
+    gridSize: 4,
+    winLength: 4,
+    initialShifts: 0,
+    shiftCooldown: 0,
+    shiftEndsTurn: true, // trueでも実質影響なし
+  },
+  expert: {
+    name: "Expert (Shift & Place)",
+    gridSize: 4,
+    winLength: 4,
+    initialShifts: 1,
+    shiftCooldown: 0,
+    shiftEndsTurn: false,
+  }
+};
+let currentGameConfig;
+
+// --- グローバル変数 ---
+let GRID; // ゲームモードによって設定される
+const colors = [0x000000, 0xff4444, 0x4444ff]; // Black (unused), Red, Blue
 let gravity = new THREE.Vector3(0, -1, 0);
 let currentPlayer = 1;
-const colors = [0x000000, 0xff4444, 0x4444ff];
-
+let shiftCounts = {};
+let shiftCooldowns = {};
 let board = [];
 let ghostPoles = [];
 let history = [];
+let highlightSpheres = [];
 
+// --- 3D関連のグローバル変数 ---
 let scene, camera, renderer, raycaster, controls;
-let gameGroup;
+let gameGroup; // ゲームオブジェクト（キューブ、駒など）をまとめるグループ
 let previewSphere;
-let uiControlsDisabled = false;
-let isGameOver = false;
-
 let highlightPlane;
-
+let columnHighlightMesh;
 let homeCameraPosition = new THREE.Vector3();
 let homeControlsTarget = new THREE.Vector3();
+
+// --- 状態管理のグローバル変数 ---
+let uiControlsDisabled = false;
+let isGameOver = false;
 let isReturningToHomeView = false;
+let selectedCellForPlacement = null;
+let selectedRotation = null; // ★ ADDED: For two-step rotation
 
 const POLE_RADIUS = 0.05;
 const GHOST_POLE_RADIUS_FACTOR = 0.7;
 const GHOST_POLE_OPACITY = 0.15;
 
-let columnHighlightMesh;
-let selectedCellForPlacement = null;
-
 // --- 初期化とメインループ ---
-initBoard();
-initScene();
-animate();
+initScene(); // 3Dシーンの基本設定を先に行う
+animate();   // アニメーションループを開始
 
 /**
- * ゲーム盤と関連変数を初期化する関数
- */
-function initBoard() {
-  board = Array(GRID).fill(null).map(() => Array(GRID).fill(null).map(() => Array(GRID).fill(0)));
-  ghostPoles = Array(GRID).fill(null).map(() => Array(GRID).fill(null).map(() => Array(GRID).fill(null)));
-  currentPlayer = 1;
-  gravity.set(0, -1, 0);
-  selectedCellForPlacement = null;
-  shiftCounts = { 1: INITIAL_SHIFTS, 2: INITIAL_SHIFTS };
-  shiftCooldowns = { 1: 0, 2: 0 };
-  history = [];
-  isGameOver = false;
-}
-
-/**
- * 3Dシーンを初期化する関数
+ * 3Dシーンの基本的な設定を行う関数 (初回実行時のみ)
  */
 function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x333333);
 
   camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, GRID * 1.5, GRID * 3);
+  camera.position.set(0, 6, 12); // 初期カメラ位置 (GRIDに依存しないように)
   camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -72,39 +100,100 @@ function initScene() {
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
 
-  homeCameraPosition.copy(camera.position);
-  homeControlsTarget.copy(controls.target);
-  controls.addEventListener('start', onDragStart);
-
   raycaster = new THREE.Raycaster();
 
   const ambientLight = new THREE.AmbientLight(0x606060);
   scene.add(ambientLight);
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
-  directionalLight.position.set(GRID * 0.75, GRID * 1.5, GRID * 1);
+  directionalLight.position.set(5, 10, 7.5);
   directionalLight.castShadow = true;
-  const shadowCamSize = GRID * 2;
+  directionalLight.shadow.mapSize.width = 2048;
+  directionalLight.shadow.mapSize.height = 2048;
+  directionalLight.shadow.camera.near = 0.1;
+  directionalLight.shadow.camera.far = 50;
+  const shadowCamSize = 10;
   directionalLight.shadow.camera.left = -shadowCamSize;
   directionalLight.shadow.camera.right = shadowCamSize;
   directionalLight.shadow.camera.top = shadowCamSize;
   directionalLight.shadow.camera.bottom = -shadowCamSize;
-  directionalLight.shadow.camera.near = 0.1;
-  directionalLight.shadow.camera.far = GRID * 5;
-  directionalLight.shadow.mapSize.width = 2048;
-  directionalLight.shadow.mapSize.height = 2048;
   scene.add(directionalLight);
+
+  const highlightGeo = new THREE.PlaneGeometry(1, 1);
+  const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+  highlightPlane = new THREE.Mesh(highlightGeo, highlightMat);
+  highlightPlane.visible = false;
+
+  const highlightBoxGeo = new THREE.BoxGeometry(0.9, 1, 0.9);
+  const highlightBoxMat = new THREE.MeshBasicMaterial({ color: 0xffff99, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+  columnHighlightMesh = new THREE.Mesh(highlightBoxGeo, highlightBoxMat);
+  columnHighlightMesh.visible = false;
+
+  const previewGeo = new THREE.SphereGeometry(0.4, 32, 16);
+  const previewMat = new THREE.MeshStandardMaterial({ opacity: 0.6, transparent: true });
+  previewSphere = new THREE.Mesh(previewGeo, previewMat);
+  previewSphere.visible = false;
+
+  // --- イベントリスナーの設定 ---
+  document.getElementById('startGameButton').addEventListener('click', startGame);
+  window.addEventListener('resize', onWindowResize);
+  renderer.domElement.addEventListener('click', onClick);
+  renderer.domElement.addEventListener('mousemove', onMouseMove);
+
+  // ★ MODIFIED: Use custom confirm dialog
+  document.getElementById('backToMenuButton').addEventListener('click', () => {
+    showConfirmDialog("Are you sure you want to return to the menu? The current game will be lost.", showMenu);
+  });
+
+  document.getElementById('resetGameButton').addEventListener('click', resetGame);
+  document.getElementById('resetViewButton').addEventListener('click', resetView);
+  document.getElementById('undoButton').addEventListener('click', undoMove);
+  document.getElementById('instructionsButton').addEventListener('click', () => toggleInstructions(true));
+
+  const rotateButtons = [
+    { id: 'btnRollLeft', axis: new THREE.Vector3(0, 0, 1), angle: Math.PI / 2 },
+    { id: 'btnRollRight', axis: new THREE.Vector3(0, 0, 1), angle: -Math.PI / 2 },
+    { id: 'btnTiltFwd', axis: new THREE.Vector3(1, 0, 0), angle: -Math.PI / 2 },
+    { id: 'btnTiltBack', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI / 2 },
+    { id: 'btnFlip', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI }
+  ];
+
+  rotateButtons.forEach(btnInfo => {
+    document.getElementById(btnInfo.id).addEventListener('click', () => handleRotationClick(btnInfo));
+  });
+}
+
+/**
+ * ゲームを開始するメイン関数
+ */
+function startGame() {
+  if (!currentGameConfig) {
+    const selectedMode = document.getElementById('gameModeSelector').value;
+    currentGameConfig = gameModes[selectedMode];
+  }
+
+  GRID = currentGameConfig.gridSize;
+
+  document.getElementById('menuContainer').style.display = 'none';
+  document.getElementById('ui').style.display = 'block';
+
+  if (gameGroup) {
+    scene.remove(gameGroup);
+    gameGroup.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
 
   gameGroup = new THREE.Group();
   scene.add(gameGroup);
 
+  initBoard();
+
   drawGrid3D();
-
-  const highlightGeo = new THREE.PlaneGeometry(GRID, GRID);
-  const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
-  highlightPlane = new THREE.Mesh(highlightGeo, highlightMat);
-  highlightPlane.visible = false;
-  gameGroup.add(highlightPlane);
-
+  createInitialGhostPoles();
 
   const groundGeo = new THREE.PlaneGeometry(GRID, GRID);
   const groundMat = new THREE.ShadowMaterial({ opacity: 0.3 });
@@ -114,56 +203,86 @@ function initScene() {
   groundPlane.receiveShadow = true;
   gameGroup.add(groundPlane);
 
-  const highlightBoxGeo = new THREE.BoxGeometry(0.9, GRID - 0.05, 0.9);
-  const highlightBoxMat = new THREE.MeshBasicMaterial({
-    color: 0xffff99,
-    transparent: true,
-    opacity: 0.2,
-    side: THREE.DoubleSide
-  });
-  columnHighlightMesh = new THREE.Mesh(highlightBoxGeo, highlightBoxMat);
-  columnHighlightMesh.receiveShadow = false;
-  columnHighlightMesh.castShadow = false;
-  columnHighlightMesh.visible = false;
+  highlightPlane.geometry.dispose();
+  highlightPlane.geometry = new THREE.PlaneGeometry(GRID, GRID);
+  gameGroup.add(highlightPlane);
+
+  columnHighlightMesh.geometry.dispose();
+  columnHighlightMesh.geometry = new THREE.BoxGeometry(0.9, GRID - 0.05, 0.9);
   gameGroup.add(columnHighlightMesh);
 
-  createInitialGhostPoles();
-
-  const previewGeo = new THREE.SphereGeometry(0.4, 32, 16);
-  const previewMat = new THREE.MeshStandardMaterial({ opacity: 0.6, transparent: true });
-  previewSphere = new THREE.Mesh(previewGeo, previewMat);
-  previewSphere.visible = false;
   gameGroup.add(previewSphere);
 
-  window.addEventListener('resize', onWindowResize);
-  renderer.domElement.addEventListener('click', onClick);
-  renderer.domElement.addEventListener('mousemove', onMouseMove);
-  document.getElementById('resetButton').addEventListener('click', resetGame);
-  document.getElementById('resetViewButton').addEventListener('click', resetView);
-  document.getElementById('undoButton').addEventListener('click', undoMove);
-  document.getElementById('instructionsButton').addEventListener('click', () => toggleInstructions(true));
+  camera.position.set(0, GRID * 1.5, GRID * 3);
+  controls.target.set(0, 0, 0);
+  homeCameraPosition.copy(camera.position);
+  homeControlsTarget.copy(controls.target);
 
-  const buttons = [
-    { id: 'btnRollLeft', axis: new THREE.Vector3(0, 0, 1), angle: Math.PI / 2 },
-    { id: 'btnRollRight', axis: new THREE.Vector3(0, 0, 1), angle: -Math.PI / 2 },
-    { id: 'btnTiltFwd', axis: new THREE.Vector3(1, 0, 0), angle: -Math.PI / 2 },
-    { id: 'btnTiltBack', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI / 2 },
-    { id: 'btnFlip', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI }
-  ];
+  gameGroup.quaternion.set(0, 0, 0, 1);
+  gravity.set(0, -1, 0);
 
-  buttons.forEach(btnInfo => {
-    const buttonElement = document.getElementById(btnInfo.id);
-    if (buttonElement) {
-      buttonElement.addEventListener('mouseenter', () => showHighlight(btnInfo.axis, btnInfo.angle));
-      buttonElement.addEventListener('mouseleave', hideHighlight);
-    }
-  });
+  enableButtons();
+}
 
+/**
+ * 現在のゲームをリセットする
+ */
+function resetGame() {
+  if (!currentGameConfig) {
+    alert("No game is currently running to reset.");
+    return;
+  }
+  // ★ MODIFIED: Use custom confirm dialog
+  showConfirmDialog("Are you sure you want to reset the current game? All progress will be lost.", startGame);
+}
+
+/**
+ * メニュー画面を表示する関数
+ */
+function showMenu() {
+  document.getElementById('menuContainer').style.display = 'flex';
+  document.getElementById('ui').style.display = 'none';
+  currentGameConfig = null;
+
+  if (gameGroup) {
+    scene.remove(gameGroup);
+    gameGroup.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
+        else child.material.dispose();
+      }
+    });
+    gameGroup = null;
+  }
+  isGameOver = false;
+  history = [];
+}
+
+/**
+ * ゲーム盤のデータ関連を初期化する関数
+ */
+function initBoard() {
+  board = Array(GRID).fill(null).map(() => Array(GRID).fill(null).map(() => Array(GRID).fill(0)));
+  ghostPoles = Array(GRID).fill(null).map(() => Array(GRID).fill(null).map(() => Array(GRID).fill(null)));
+  currentPlayer = 1;
+  gravity.set(0, -1, 0);
+  selectedCellForPlacement = null;
+  selectedRotation = null;
+  shiftCounts = { 1: currentGameConfig.initialShifts, 2: currentGameConfig.initialShifts };
+  shiftCooldowns = { 1: 0, 2: 0 };
+  history = [];
+  isGameOver = false;
+  clearHighlightSpheres();
+  hideHighlight();
   updateStatus();
 }
 
+/**
+ * 回転後の底面をハイライト表示する
+ */
 function showHighlight(rotationAxis, angle) {
-  if (uiControlsDisabled) return;
+  if (uiControlsDisabled || !gameGroup) return;
   const currentQuaternion = gameGroup.quaternion.clone();
   const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(rotationAxis, angle);
   const targetQuaternion = currentQuaternion.multiply(rotationQuaternion);
@@ -176,6 +295,7 @@ function showHighlight(rotationAxis, angle) {
   if (maxVal === absX) newLocalGravity.set(Math.sign(newLocalGravity.x), 0, 0);
   else if (maxVal === absY) newLocalGravity.set(0, Math.sign(newLocalGravity.y), 0);
   else newLocalGravity.set(0, 0, Math.sign(newLocalGravity.z));
+
   highlightPlane.rotation.set(0, 0, 0);
   const halfGrid = GRID / 2 + 0.01;
   if (newLocalGravity.x === 1) {
@@ -199,209 +319,52 @@ function showHighlight(rotationAxis, angle) {
   }
   highlightPlane.visible = true;
 }
+function hideHighlight() { if (highlightPlane) highlightPlane.visible = false; }
 
-function hideHighlight() {
-  highlightPlane.visible = false;
-}
+function createInitialGhostPoles() { if (!gameGroup) return; const ghostPoleMat = new THREE.MeshStandardMaterial({ color: 0x999999, transparent: true, opacity: GHOST_POLE_OPACITY, metalness: 0.0, roughness: 0.9 }); for (let y = 0; y < GRID; y++) { for (let z = 0; z < GRID; z++) { for (let x = 0; x < GRID; x++) { const poleGeo = new THREE.CylinderGeometry(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, 1, 6); const ghostPole = new THREE.Mesh(poleGeo, ghostPoleMat.clone()); ghostPole.userData.isGhostPole = true; ghostPole.userData.boardX = x; ghostPole.userData.boardY = y; ghostPole.userData.boardZ = z; updateSingleGhostPole(ghostPole, x, y, z, gravity); ghostPole.visible = (board[y][z][x] === 0); gameGroup.add(ghostPole); ghostPoles[y][z][x] = ghostPole; } } } }
+function updateSingleGhostPole(ghostPole, boardX, boardY, boardZ, currentGravityVec) { const cellCenter = get3DPosition(boardX, boardY, boardZ); const validPoleLength = Math.max(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR * 2, 1.0); ghostPole.geometry.dispose(); ghostPole.geometry = new THREE.CylinderGeometry(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, validPoleLength, 6); ghostPole.position.copy(cellCenter); ghostPole.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), currentGravityVec.clone().negate()); }
+function updateAllGhostPolesVisibilityAndTransform() { for (let y = 0; y < GRID; y++) { for (let z = 0; z < GRID; z++) { for (let x = 0; x < GRID; x++) { const ghostPole = ghostPoles[y]?.[z]?.[x]; if (ghostPole) { if (board[y][z][x] === 0) { updateSingleGhostPole(ghostPole, x, y, z, gravity); ghostPole.visible = true; } else { ghostPole.visible = false; } } } } } }
+function drawGrid3D() { if (!gameGroup) return; const halfGrid = GRID / 2.0; const outerBoxGeo = new THREE.BoxGeometry(GRID, GRID, GRID); const outerEdges = new THREE.EdgesGeometry(outerBoxGeo); const outerLines = new THREE.LineSegments(outerEdges, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 })); gameGroup.add(outerLines); const innerLinesMaterial = new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.3 }); const linesPoints = []; for (let i = 1; i < GRID; i++) { const coord = -halfGrid + i; linesPoints.push(new THREE.Vector3(-halfGrid, coord, -halfGrid), new THREE.Vector3(halfGrid, coord, -halfGrid)); linesPoints.push(new THREE.Vector3(-halfGrid, coord, halfGrid), new THREE.Vector3(halfGrid, coord, halfGrid)); linesPoints.push(new THREE.Vector3(-halfGrid, -halfGrid, coord), new THREE.Vector3(halfGrid, -halfGrid, coord)); linesPoints.push(new THREE.Vector3(-halfGrid, halfGrid, coord), new THREE.Vector3(halfGrid, halfGrid, coord)); linesPoints.push(new THREE.Vector3(coord, -halfGrid, -halfGrid), new THREE.Vector3(coord, halfGrid, -halfGrid)); linesPoints.push(new THREE.Vector3(coord, -halfGrid, halfGrid), new THREE.Vector3(coord, halfGrid, halfGrid)); linesPoints.push(new THREE.Vector3(coord, -halfGrid, -halfGrid), new THREE.Vector3(coord, -halfGrid, halfGrid)); linesPoints.push(new THREE.Vector3(coord, halfGrid, -halfGrid), new THREE.Vector3(coord, halfGrid, halfGrid)); linesPoints.push(new THREE.Vector3(-halfGrid, coord, -halfGrid), new THREE.Vector3(-halfGrid, coord, halfGrid)); linesPoints.push(new THREE.Vector3(halfGrid, coord, -halfGrid), new THREE.Vector3(halfGrid, coord, halfGrid)); } if (linesPoints.length > 0) { const innerGeometry = new THREE.BufferGeometry().setFromPoints(linesPoints); const innerLineSegments = new THREE.LineSegments(innerGeometry, innerLinesMaterial); gameGroup.add(innerLineSegments); } }
+function get3DPosition(x, y, z) { return new THREE.Vector3(x - GRID / 2 + 0.5, y - GRID / 2 + 0.5, z - GRID / 2 + 0.5); }
+function animateDrop(x, y, z, player) { if (!gameGroup) return; const targetPos = get3DPosition(x, y, z); const startPos = targetPos.clone().sub(gravity.clone().multiplyScalar(GRID)); const sphereGeo = new THREE.SphereGeometry(0.4, 32, 16); const sphereMat = new THREE.MeshStandardMaterial({ color: colors[player], metalness: 0.3, roughness: 0.4 }); const sphere = new THREE.Mesh(sphereGeo, sphereMat); sphere.position.copy(startPos); sphere.castShadow = true; sphere.userData.isPiece = true; sphere.userData.boardX = x; sphere.userData.boardY = y; sphere.userData.boardZ = z; gameGroup.add(sphere); const pole = createSupportPole(sphere); sphere.userData.pole = pole; gameGroup.add(pole); if (ghostPoles[y]?.[z]?.[x]) { ghostPoles[y][z][x].visible = false; } animateMotion(sphere, targetPos, () => { updateSupportPole(sphere, pole); pole.visible = true; }); }
+function createSupportPole(pieceMesh) { const poleGeo = new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS, 0.01, 8); const poleMat = new THREE.MeshStandardMaterial({ color: 0x999999, transparent: true, opacity: GHOST_POLE_OPACITY, metalness: 0.0, roughness: 0.9 }); const pole = new THREE.Mesh(poleGeo, poleMat); pole.castShadow = true; pole.userData.isPole = true; pole.visible = false; return pole; }
+function updateSupportPole(pieceMesh, poleMesh) { const piecePos = pieceMesh.position; const cellCenter = get3DPosition(pieceMesh.userData.boardX, pieceMesh.userData.boardY, pieceMesh.userData.boardZ); const { axis, dir } = getGravityAxisAndDir(); const cellBottomPlaneCoord = cellCenter[axis] - 0.5 * dir; let poleLength = Math.max(POLE_RADIUS * 2, Math.abs(piecePos[axis] - cellBottomPlaneCoord)); poleMesh.geometry.dispose(); poleMesh.geometry = new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS, poleLength, 8); const poleCenterOnAxis = (piecePos[axis] + cellBottomPlaneCoord) / 2; const poleCenterPos = piecePos.clone(); poleCenterPos[axis] = poleCenterOnAxis; poleMesh.position.copy(poleCenterPos); poleMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate()); }
 
-function createInitialGhostPoles() {
-  const ghostPoleMat = new THREE.MeshStandardMaterial({
-    color: 0x999999,
-    transparent: true,
-    opacity: GHOST_POLE_OPACITY,
-    metalness: 0.0,
-    roughness: 0.9
-  });
-  for (let y = 0; y < GRID; y++) {
-    for (let z = 0; z < GRID; z++) {
-      for (let x = 0; x < GRID; x++) {
-        const poleGeo = new THREE.CylinderGeometry(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, 1, 6);
-        const ghostPole = new THREE.Mesh(poleGeo, ghostPoleMat.clone());
-        ghostPole.castShadow = false;
-        ghostPole.receiveShadow = false;
-        ghostPole.userData.isGhostPole = true;
-        ghostPole.userData.boardX = x;
-        ghostPole.userData.boardY = y;
-        ghostPole.userData.boardZ = z;
-        updateSingleGhostPole(ghostPole, x, y, z, gravity);
-        ghostPole.visible = (board[y][z][x] === 0);
-        gameGroup.add(ghostPole);
-        ghostPoles[y][z][x] = ghostPole;
-      }
-    }
-  }
-}
-
-function updateSingleGhostPole(ghostPole, boardX, boardY, boardZ, currentGravityVec) {
-  const { axis, dir } = getGravityAxisAndDirFromVec(currentGravityVec);
-  const cellCenter = get3DPosition(boardX, boardY, boardZ);
-  const poleLength = 1.0;
-  const validPoleLength = Math.max(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR * 2, poleLength);
-  ghostPole.geometry.dispose();
-  ghostPole.geometry = new THREE.CylinderGeometry(POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, POLE_RADIUS * GHOST_POLE_RADIUS_FACTOR, validPoleLength, 6);
-  ghostPole.position.copy(cellCenter);
-  ghostPole.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), currentGravityVec.clone().negate());
-}
-
-function updateAllGhostPolesVisibilityAndTransform() {
-  for (let y = 0; y < GRID; y++) {
-    for (let z = 0; z < GRID; z++) {
-      for (let x = 0; x < GRID; x++) {
-        const ghostPole = ghostPoles[y][z][x];
-        if (board[y][z][x] === 0) {
-          updateSingleGhostPole(ghostPole, x, y, z, gravity);
-          ghostPole.visible = true;
-        } else {
-          ghostPole.visible = false;
-        }
-      }
-    }
-  }
-}
-
-function drawGrid3D() {
-  const halfGrid = GRID / 2.0;
-  const outerBoxGeo = new THREE.BoxGeometry(GRID, GRID, GRID);
-  const outerEdges = new THREE.EdgesGeometry(outerBoxGeo);
-  const outerLines = new THREE.LineSegments(outerEdges, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
-  outerLines.castShadow = false;
-  outerLines.receiveShadow = false;
-  gameGroup.add(outerLines);
-  const innerLinesMaterial = new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.3 });
-  const innerPoints = [];
-  for (let i = 1; i < GRID; i++) {
-    const coord = -halfGrid + i;
-    innerPoints.push(new THREE.Vector3(-halfGrid, coord, -halfGrid), new THREE.Vector3(halfGrid, coord, -halfGrid));
-    innerPoints.push(new THREE.Vector3(-halfGrid, coord, halfGrid), new THREE.Vector3(halfGrid, coord, halfGrid));
-    innerPoints.push(new THREE.Vector3(-halfGrid, -halfGrid, coord), new THREE.Vector3(halfGrid, -halfGrid, coord));
-    innerPoints.push(new THREE.Vector3(-halfGrid, halfGrid, coord), new THREE.Vector3(halfGrid, halfGrid, coord));
-    innerPoints.push(new THREE.Vector3(coord, -halfGrid, -halfGrid), new THREE.Vector3(coord, halfGrid, -halfGrid));
-    innerPoints.push(new THREE.Vector3(coord, -halfGrid, halfGrid), new THREE.Vector3(coord, halfGrid, halfGrid));
-    innerPoints.push(new THREE.Vector3(-halfGrid, -halfGrid, coord), new THREE.Vector3(-halfGrid, halfGrid, coord));
-    innerPoints.push(new THREE.Vector3(halfGrid, -halfGrid, coord), new THREE.Vector3(halfGrid, halfGrid, coord));
-    innerPoints.push(new THREE.Vector3(coord, -halfGrid, -halfGrid), new THREE.Vector3(coord, -halfGrid, halfGrid));
-    innerPoints.push(new THREE.Vector3(coord, halfGrid, -halfGrid), new THREE.Vector3(coord, halfGrid, halfGrid));
-    innerPoints.push(new THREE.Vector3(-halfGrid, coord, -halfGrid), new THREE.Vector3(-halfGrid, coord, halfGrid));
-    innerPoints.push(new THREE.Vector3(halfGrid, coord, -halfGrid), new THREE.Vector3(halfGrid, coord, halfGrid));
-  }
-  const uniquePointPairs = new Set();
-  const finalInnerPoints = [];
-  for (let i = 0; i < innerPoints.length; i += 2) {
-    const p1 = innerPoints[i];
-    const p2 = innerPoints[i + 1];
-    const key1 = [p1, p2].map(p => `${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)}`).sort().join('-');
-    if (!uniquePointPairs.has(key1)) {
-      uniquePointPairs.add(key1);
-      finalInnerPoints.push(p1, p2);
-    }
-  }
-  if (finalInnerPoints.length > 0) {
-    const innerGeometry = new THREE.BufferGeometry().setFromPoints(finalInnerPoints);
-    const innerLineSegments = new THREE.LineSegments(innerGeometry, innerLinesMaterial);
-    innerLineSegments.castShadow = false;
-    innerLineSegments.receiveShadow = false;
-    gameGroup.add(innerLineSegments);
-  }
-}
-
-function get3DPosition(x, y, z) {
-  return new THREE.Vector3(x - GRID / 2 + 0.5, y - GRID / 2 + 0.5, z - GRID / 2 + 0.5);
-}
-
-function animateDrop(x, y, z, player) {
-  const targetPos = get3DPosition(x, y, z);
-  const startPos = targetPos.clone().sub(gravity.clone().multiplyScalar(GRID));
-  const sphereGeo = new THREE.SphereGeometry(0.4, 32, 16);
-  const sphereMat = new THREE.MeshStandardMaterial({ color: colors[player], metalness: 0.3, roughness: 0.4 });
-  const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-  sphere.position.copy(startPos);
-  sphere.castShadow = true;
-  sphere.receiveShadow = false;
-  sphere.userData.isPiece = true;
-  sphere.userData.boardX = x;
-  sphere.userData.boardY = y;
-  sphere.userData.boardZ = z;
-  gameGroup.add(sphere);
-  const pole = createSupportPole(sphere);
-  sphere.userData.pole = pole;
-  gameGroup.add(pole);
-  if (ghostPoles[y] && ghostPoles[y][z] && ghostPoles[y][z][x]) {
-    ghostPoles[y][z][x].visible = false;
-  }
-  animateMotion(sphere, targetPos, () => {
-    updateSupportPole(sphere, pole);
-    pole.visible = true;
-  });
-}
-
-function createSupportPole(pieceMesh) {
-  const piecePos = pieceMesh.position;
-  const cellCenter = get3DPosition(pieceMesh.userData.boardX, pieceMesh.userData.boardY, pieceMesh.userData.boardZ);
-  const { axis, dir } = getGravityAxisAndDir();
-  let poleLength = 0.01;
-  const poleGeo = new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS, poleLength, 8);
-  const poleMat = new THREE.MeshStandardMaterial({
-    color: 0x999999,
-    transparent: true,
-    opacity: GHOST_POLE_OPACITY,
-    metalness: 0.0,
-    roughness: 0.9
-  });
-  const pole = new THREE.Mesh(poleGeo, poleMat);
-  pole.castShadow = true;
-  pole.receiveShadow = false;
-  pole.userData.isPole = true;
-  pole.visible = false;
-  return pole;
-}
-
-function updateSupportPole(pieceMesh, poleMesh) {
-  const piecePos = pieceMesh.position;
-  const cellCenter = get3DPosition(pieceMesh.userData.boardX, pieceMesh.userData.boardY, pieceMesh.userData.boardZ);
-  const { axis, dir } = getGravityAxisAndDir();
-  const cellBottomPlaneCoord = cellCenter[axis] - 0.5 * dir;
-  let poleLength = Math.abs(piecePos[axis] - cellBottomPlaneCoord);
-  poleLength = Math.max(POLE_RADIUS * 2, poleLength);
-  poleMesh.geometry.dispose();
-  poleMesh.geometry = new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS, poleLength, 8);
-  const poleCenterOnAxis = (piecePos[axis] + cellBottomPlaneCoord) / 2;
-  const poleCenterPos = piecePos.clone();
-  poleCenterPos[axis] = poleCenterOnAxis;
-  poleMesh.position.copy(poleCenterPos);
-  poleMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate());
-}
-
+/**
+ * マウスカーソル位置の3D座標を取得する関数 (gameGroupローカル座標)
+ */
 function getIntersectPoint(event) {
-  if (uiControlsDisabled) return null;
+  if (uiControlsDisabled || !gameGroup) return null;
   const rect = renderer.domElement.getBoundingClientRect();
-  const mouse = new THREE.Vector2(
-    ((event.clientX - rect.left) / rect.width) * 2 - 1,
-    -((event.clientY - rect.top) / rect.height) * 2 + 1
-  );
+  const mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
   raycaster.setFromCamera(mouse, camera);
   const invMatrix = new THREE.Matrix4().copy(gameGroup.matrixWorld).invert();
   const localRay = new THREE.Ray().copy(raycaster.ray).applyMatrix4(invMatrix);
-  const boundingBox = new THREE.Box3(
-    new THREE.Vector3(-GRID / 2, -GRID / 2, -GRID / 2),
-    new THREE.Vector3(GRID / 2, GRID / 2, GRID / 2)
-  );
+  const boundingBox = new THREE.Box3(new THREE.Vector3(-GRID / 2, -GRID / 2, -GRID / 2), new THREE.Vector3(GRID / 2, GRID / 2, GRID / 2));
   return localRay.intersectBox(boundingBox, new THREE.Vector3());
 }
 
+/**
+ * クリック時の処理 (駒の配置 or 回転選択のキャンセル)
+ */
 function onClick(event) {
-  if (uiControlsDisabled) return;
+  if (uiControlsDisabled || isGameOver) return;
+
+  if (selectedRotation) {
+    selectedRotation = null;
+    hideHighlight();
+    updateStatus();
+    return;
+  }
+
   const point = getIntersectPoint(event);
   let clickedLandingCell = null;
   if (point) {
     const { axis: gravityAxis, dir: gravityDir } = getGravityAxisAndDir();
     let cX, cY, cZ;
-    if (gravityAxis === 'y') {
-      cX = Math.floor(point.x + GRID / 2); cZ = Math.floor(point.z + GRID / 2);
-    } else if (gravityAxis === 'x') {
-      cY = Math.floor(point.y + GRID / 2); cZ = Math.floor(point.z + GRID / 2);
-    } else {
-      cX = Math.floor(point.x + GRID / 2); cY = Math.floor(point.y + GRID / 2);
-    }
+    if (gravityAxis === 'y') { cX = Math.floor(point.x + GRID / 2); cZ = Math.floor(point.z + GRID / 2); }
+    else if (gravityAxis === 'x') { cY = Math.floor(point.y + GRID / 2); cZ = Math.floor(point.z + GRID / 2); }
+    else { cX = Math.floor(point.x + GRID / 2); cY = Math.floor(point.y + GRID / 2); }
     for (let i = 0; i < GRID; i++) {
       const w = (gravityDir === -1) ? i : GRID - 1 - i;
       const checkPos = {};
@@ -417,10 +380,7 @@ function onClick(event) {
     }
   }
   if (selectedCellForPlacement) {
-    if (clickedLandingCell &&
-      clickedLandingCell.boardX === selectedCellForPlacement.boardX &&
-      clickedLandingCell.boardY === selectedCellForPlacement.boardY &&
-      clickedLandingCell.boardZ === selectedCellForPlacement.boardZ) {
+    if (clickedLandingCell && clickedLandingCell.boardX === selectedCellForPlacement.boardX && clickedLandingCell.boardY === selectedCellForPlacement.boardY && clickedLandingCell.boardZ === selectedCellForPlacement.boardZ) {
       placePieceInternal(selectedCellForPlacement.boardX, selectedCellForPlacement.boardY, selectedCellForPlacement.boardZ);
     } else if (clickedLandingCell) {
       selectedCellForPlacement = clickedLandingCell;
@@ -438,6 +398,9 @@ function onClick(event) {
   updateStatus();
 }
 
+/**
+ * 選択状態に基づいてプレビューとハイライトを更新する関数
+ */
 function updatePreviewsForSelection() {
   if (selectedCellForPlacement) {
     const { boardX, boardY, boardZ } = selectedCellForPlacement;
@@ -446,28 +409,21 @@ function updatePreviewsForSelection() {
     previewSphere.visible = true;
     const { axis: gravityAxis } = getGravityAxisAndDir();
     const columnCenter = new THREE.Vector3();
-    if (gravityAxis === 'y') {
-      columnCenter.set(get3DPosition(boardX, 0, boardZ).x, 0, get3DPosition(boardX, 0, boardZ).z);
-    } else if (gravityAxis === 'x') {
-      columnCenter.set(0, get3DPosition(0, boardY, boardZ).y, get3DPosition(0, boardY, boardZ).z);
-    } else {
-      columnCenter.set(get3DPosition(boardX, boardY, 0).x, get3DPosition(boardX, boardY, 0).y, 0);
-    }
+    if (gravityAxis === 'y') { columnCenter.set(get3DPosition(boardX, 0, boardZ).x, 0, get3DPosition(boardX, 0, boardZ).z); }
+    else if (gravityAxis === 'x') { columnCenter.set(0, get3DPosition(0, boardY, boardZ).y, get3DPosition(0, boardY, boardZ).z); }
+    else { columnCenter.set(get3DPosition(boardX, boardY, 0).x, get3DPosition(boardX, boardY, 0).y, 0); }
     columnHighlightMesh.position.copy(columnCenter);
     columnHighlightMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate());
     columnHighlightMesh.visible = true;
   }
 }
+function hidePreviews() { if (previewSphere) previewSphere.visible = false; if (columnHighlightMesh) columnHighlightMesh.visible = false; }
 
-function hidePreviews() {
-  previewSphere.visible = false;
-  columnHighlightMesh.visible = false;
-}
-
+/**
+ * マウス移動時の処理
+ */
 function onMouseMove(event) {
-  if (selectedCellForPlacement) {
-    return;
-  }
+  if (selectedCellForPlacement || uiControlsDisabled || isGameOver || selectedRotation) { return; }
   const point = getIntersectPoint(event);
   if (point) {
     const { axis: gravityAxis, dir: gravityDir } = getGravityAxisAndDir();
@@ -500,11 +456,12 @@ function onMouseMove(event) {
       }
     }
     if (!landingCellFound) hidePreviews();
-    return;
-  }
-  hidePreviews();
+  } else { hidePreviews(); }
 }
 
+/**
+ * 内部的な駒配置処理 (onClickから呼び出される)
+ */
 function placePieceInternal(px, py, pz) {
   saveState();
   board[py][pz][px] = currentPlayer;
@@ -515,6 +472,9 @@ function placePieceInternal(px, py, pz) {
   switchPlayer();
 }
 
+/**
+ * プレイヤーを交代する関数
+ */
 function switchPlayer() {
   currentPlayer = 3 - currentPlayer;
   if (shiftCooldowns[currentPlayer] > 0) {
@@ -523,6 +483,9 @@ function switchPlayer() {
   updateStatus();
 }
 
+/**
+ * 回転のヒントアニメーションを実行する関数
+ */
 function animateRotationHint(axis, mainRotationAngle, initialQuaternion) {
   return new Promise(resolve => {
     const hintAngle = Math.sign(mainRotationAngle) * Math.PI / 18;
@@ -549,8 +512,12 @@ function animateRotationHint(axis, mainRotationAngle, initialQuaternion) {
   });
 }
 
-function rotateWorld(rotationAxis, angle) {
-  if (uiControlsDisabled) return;
+/**
+ * 回転ボタンのクリックを処理する (2段階実行)
+ */
+function handleRotationClick(btnInfo) {
+  if (uiControlsDisabled || isGameOver) return;
+
   if (shiftCounts[currentPlayer] <= 0) {
     alert("You have no gravity shifts left!");
     return;
@@ -559,17 +526,40 @@ function rotateWorld(rotationAxis, angle) {
     alert(`You must wait ${shiftCooldowns[currentPlayer]} more turn(s) to shift gravity again.`);
     return;
   }
+
+  if (selectedRotation && selectedRotation.id === btnInfo.id) {
+    executeRotation(btnInfo.axis, btnInfo.angle);
+    selectedRotation = null;
+    hideHighlight();
+  } else {
+    selectedCellForPlacement = null;
+    hidePreviews();
+
+    selectedRotation = btnInfo;
+    showHighlight(btnInfo.axis, btnInfo.angle);
+    updateStatus();
+  }
+}
+
+/**
+ * 立方体を回転させるメイン関数
+ */
+function executeRotation(rotationAxis, angle) {
+  if (uiControlsDisabled || isGameOver || !gameGroup) return;
+
   saveState();
   shiftCounts[currentPlayer]--;
-  shiftCooldowns[currentPlayer] = SHIFT_COOLDOWN_TURNS;
+  shiftCooldowns[currentPlayer] = currentGameConfig.shiftCooldown;
   uiControlsDisabled = true;
   isReturningToHomeView = false;
   selectedCellForPlacement = null;
   hidePreviews();
   hideHighlight();
+
   const originalGroupQuaternion = gameGroup.quaternion.clone();
   const mainRotationQuaternion = new THREE.Quaternion().setFromAxisAngle(rotationAxis, angle);
   const targetGroupQuaternion = originalGroupQuaternion.clone().multiply(mainRotationQuaternion);
+
   const worldDown = new THREE.Vector3(0, -1, 0);
   let newLocalGravity = worldDown.clone().applyQuaternion(targetGroupQuaternion.clone().invert());
   let absX = Math.abs(newLocalGravity.x);
@@ -579,6 +569,7 @@ function rotateWorld(rotationAxis, angle) {
   if (maxVal === absX) newLocalGravity.set(Math.sign(newLocalGravity.x), 0, 0);
   else if (maxVal === absY) newLocalGravity.set(0, Math.sign(newLocalGravity.y), 0);
   else newLocalGravity.set(0, 0, Math.sign(newLocalGravity.z));
+
   animateRotationHint(rotationAxis, angle, originalGroupQuaternion)
     .then(() => {
       gravity.copy(newLocalGravity);
@@ -591,7 +582,9 @@ function rotateWorld(rotationAxis, angle) {
       if (checkWin()) {
         return;
       }
-      switchPlayer();
+      if (currentGameConfig.shiftEndsTurn) {
+        switchPlayer();
+      }
       uiControlsDisabled = false;
       updateStatus();
     });
@@ -614,33 +607,27 @@ function animateRotation(targetQuaternion) {
 }
 
 async function animateBoardUpdate() {
+  if (!gameGroup) return;
   applyGravity();
   const currentPieces = gameGroup.children.filter(obj => obj.userData.isPiece);
   const targetPieceData = [];
-  for (let y = 0; y < GRID; y++) {
-    for (let z = 0; z < GRID; z++) {
-      for (let x = 0; x < GRID; x++) {
-        if (board[y][z][x] !== 0) {
-          targetPieceData.push({
-            pos: get3DPosition(x, y, z),
-            player: board[y][z][x],
-            boardX: x, boardY: y, boardZ: z
-          });
-        }
-      }
-    }
-  }
+  for (let y = 0; y < GRID; y++) { for (let z = 0; z < GRID; z++) { for (let x = 0; x < GRID; x++) { if (board[y][z][x] !== 0) { targetPieceData.push({ pos: get3DPosition(x, y, z), player: board[y][z][x], boardX: x, boardY: y, boardZ: z }); } } } }
+
   const animationPromises = [];
   const unassignedPieces = [...currentPieces];
+
   for (const target of targetPieceData) {
     let pieceToMove = null;
     let poleToMove = null;
     let pieceIndex = -1;
+    const { axis: gravityAxis } = getGravityAxisAndDir();
     for (let i = 0; i < unassignedPieces.length; i++) {
       const piece = unassignedPieces[i];
-      if (piece.material.color.getHex() === colors[target.player] &&
-        piece.userData.boardX === target.boardX &&
-        piece.userData.boardZ === target.boardZ) {
+      let match = piece.material.color.getHex() === colors[target.player];
+      if (gravityAxis === 'y') match = match && piece.userData.boardX === target.boardX && piece.userData.boardZ === target.boardZ;
+      else if (gravityAxis === 'x') match = match && piece.userData.boardY === target.boardY && piece.userData.boardZ === target.boardZ;
+      else match = match && piece.userData.boardX === target.boardX && piece.userData.boardY === target.boardY;
+      if (match) {
         pieceToMove = piece;
         poleToMove = piece.userData.pole;
         pieceIndex = i;
@@ -658,6 +645,7 @@ async function animateBoardUpdate() {
         }
       }
     }
+
     if (pieceToMove && poleToMove) {
       animationPromises.push(new Promise(resolve => {
         animateMotion(pieceToMove, target.pos, () => {
@@ -672,10 +660,16 @@ async function animateBoardUpdate() {
       unassignedPieces.splice(pieceIndex, 1);
     }
   }
+
   unassignedPieces.forEach(piece => {
     if (piece.userData.pole) gameGroup.remove(piece.userData.pole);
     gameGroup.remove(piece);
+    if (piece.geometry) piece.geometry.dispose();
+    if (piece.material) piece.material.dispose();
+    if (piece.userData.pole && piece.userData.pole.geometry) piece.userData.pole.geometry.dispose();
+    if (piece.userData.pole && piece.userData.pole.material) piece.userData.pole.material.dispose();
   });
+
   await Promise.all(animationPromises);
   updateAllGhostPolesVisibilityAndTransform();
 }
@@ -705,28 +699,21 @@ function applyGravity() {
     for (let v = 0; v < GRID; v++) {
       const line = [];
       for (let w_scan = 0; w_scan < GRID; w_scan++) {
-        const pos = {};
-        pos[u_axis] = u; pos[v_axis] = v; pos[axis] = w_scan;
+        const pos = {}; pos[u_axis] = u; pos[v_axis] = v; pos[axis] = w_scan;
         if (board[pos.y][pos.z][pos.x] !== 0) {
-          if (dir === -1) {
-            line.push(board[pos.y][pos.z][pos.x]);
-          } else {
-            line.unshift(board[pos.y][pos.z][pos.x]);
-          }
+          if (dir === -1) { line.push(board[pos.y][pos.z][pos.x]); }
+          else { line.unshift(board[pos.y][pos.z][pos.x]); }
         }
       }
       for (let i = 0; i < line.length; i++) {
         const w_fill = (dir === -1) ? i : GRID - 1 - i;
-        const pos_fill = {};
-        pos_fill[u_axis] = u; pos_fill[v_axis] = v; pos_fill[axis] = w_fill;
+        const pos_fill = {}; pos_fill[u_axis] = u; pos_fill[v_axis] = v; pos_fill[axis] = w_fill;
         newBoard[pos_fill.y][pos_fill.z][pos_fill.x] = line[i];
       }
     }
   }
   board = newBoard;
 }
-
-let highlightSpheres = [];
 
 function checkWin() {
   const directions = [
@@ -739,15 +726,17 @@ function checkWin() {
   const visited = new Set();
   const lines1 = [];
   const lines2 = [];
+
   for (let y = 0; y < GRID; y++) {
     for (let z = 0; z < GRID; z++) {
       for (let x = 0; x < GRID; x++) {
         const player = board[y][z][x];
         if (player === 0) continue;
+
         for (const [dx, dy, dz] of directions) {
           let positions = [];
           let valid = true;
-          for (let i = 0; i < 4; i++) {
+          for (let i = 0; i < currentGameConfig.winLength; i++) {
             const nx = x + dx * i;
             const ny = y + dy * i;
             const nz = z + dz * i;
@@ -761,6 +750,7 @@ function checkWin() {
             }
             positions.push({ x: nx, y: ny, z: nz });
           }
+
           const key = positions.map(p => `${p.x},${p.y},${p.z}`).sort().join('|');
           if (valid && !visited.has(key)) {
             visited.add(key);
@@ -776,8 +766,10 @@ function checkWin() {
       }
     }
   }
+
   highlightLines(lines1);
   highlightLines(lines2);
+
   const statusElem = document.getElementById("status");
   if (count1 > 0 || count2 > 0) {
     let message = "";
@@ -803,6 +795,7 @@ function checkWin() {
 }
 
 function highlightLines(lines) {
+  if (!gameGroup) return;
   lines.forEach(positions => {
     positions.forEach(({ x, y, z }) => {
       const foundPiece = gameGroup.children.find(obj =>
@@ -820,17 +813,11 @@ function highlightLines(lines) {
   });
 }
 
-/**
- * ボタンを無効化する関数
- */
 function disableButtons() {
-  // ★ MODIFIED: 'undoButton'を無効化対象から除外
   const buttons = document.querySelectorAll('#ui button');
   buttons.forEach(btn => {
-    if (btn.id !== 'resetButton' &&
-      btn.id !== 'resetViewButton' &&
-      btn.id !== 'instructionsButton' &&
-      btn.id !== 'undoButton') {
+    const enabledIds = ['backToMenuButton', 'resetGameButton', 'resetViewButton', 'instructionsButton', 'undoButton'];
+    if (!enabledIds.includes(btn.id)) {
       btn.disabled = true;
     }
   });
@@ -839,9 +826,7 @@ function disableButtons() {
 
 function enableButtons() {
   const buttons = document.querySelectorAll('#ui button');
-  buttons.forEach(btn => {
-    btn.disabled = false;
-  });
+  buttons.forEach(btn => { btn.disabled = false; });
   uiControlsDisabled = false;
   updateStatus();
 }
@@ -856,9 +841,7 @@ function clearHighlightSpheres() {
   highlightSpheres = [];
 }
 
-function getGravityAxisAndDir() {
-  return getGravityAxisAndDirFromVec(gravity);
-}
+function getGravityAxisAndDir() { return getGravityAxisAndDirFromVec(gravity); }
 
 function getGravityAxisAndDirFromVec(gravityVector) {
   let axis = 'y';
@@ -868,55 +851,37 @@ function getGravityAxisAndDirFromVec(gravityVector) {
   return { axis, dir };
 }
 
-function resetGame() {
-  if (uiControlsDisabled && !isGameOver) {
-    return;
-  }
-  isReturningToHomeView = false;
-  selectedCellForPlacement = null;
-  hidePreviews();
-  clearHighlightSpheres();
-  initBoard();
-  enableButtons();
-  const targetQuaternion = new THREE.Quaternion();
-  animateRotation(targetQuaternion).then(() => {
-    const objectsToRemove = gameGroup.children.filter(obj => obj.userData.isPiece || obj.userData.isPole || obj.userData.isGhostPole);
-    objectsToRemove.forEach(obj => {
-      if (obj.parent) obj.parent.remove(obj);
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) obj.material.dispose();
-    });
-    createInitialGhostPoles();
-    updateAllGhostPolesVisibilityAndTransform();
-    updateStatus();
-    isReturningToHomeView = true;
-  });
-}
-
 function updateStatus() {
   if (isGameOver) {
     const statusElem = document.getElementById('status');
-    if (statusElem.innerHTML.includes("wins") || statusElem.innerHTML.includes("Draw")) {
-      return;
-    }
+    if (statusElem && (statusElem.innerHTML.includes("wins") || statusElem.innerHTML.includes("Draw"))) { return; }
   }
-  if (uiControlsDisabled && !isGameOver) {
-    return
+  if (uiControlsDisabled && !isGameOver && !document.getElementById('instructionsModal').style.display.includes('flex') && !document.getElementById('confirmModal').style.display.includes('flex')) {
+    return;
   }
+  if (!currentGameConfig) return;
+
   const playerColor = currentPlayer === 1 ? 'Red' : 'Blue';
   const playerHexColor = currentPlayer === 1 ? colors[1].toString(16).padStart(6, '0') : colors[2].toString(16).padStart(6, '0');
   let statusText = `Player: <strong style="color: #${playerHexColor}">${playerColor}</strong>`;
-  statusText += ` &nbsp; | &nbsp; Shifts Left: ${shiftCounts[currentPlayer]}`;
-  if (shiftCooldowns[currentPlayer] > 0) {
-    statusText += ` &nbsp; | &nbsp; <span style="color: #ffcc00;">Shift Cooldown: ${shiftCooldowns[currentPlayer]} turn(s)</span>`;
+  if (currentGameConfig.initialShifts > 0) {
+    statusText += ` &nbsp; | &nbsp; Shifts Left: ${shiftCounts[currentPlayer]}`;
+    if (shiftCooldowns[currentPlayer] > 0) {
+      statusText += ` &nbsp; | &nbsp; <span style="color: #ffcc00;">Shift Cooldown: ${shiftCooldowns[currentPlayer]} turn(s)</span>`;
+    }
   }
-  if (selectedCellForPlacement) {
+
+  if (selectedRotation) {
+    statusText += " <br> Click the rotation button again to confirm, or click the board to cancel.";
+  } else if (selectedCellForPlacement) {
     statusText += " <br> Click again on highlighted column to place piece.";
   }
+
   document.getElementById('status').innerHTML = statusText;
-  const canShift = shiftCounts[currentPlayer] > 0 && shiftCooldowns[currentPlayer] === 0;
+
+  const canShift = currentGameConfig.initialShifts > 0 && shiftCounts[currentPlayer] > 0 && shiftCooldowns[currentPlayer] === 0;
   const rotateButtons = document.querySelectorAll('#btnRollLeft, #btnRollRight, #btnTiltFwd, #btnTiltBack, #btnFlip');
-  rotateButtons.forEach(btn => btn.disabled = !canShift || uiControlsDisabled);
+  rotateButtons.forEach(btn => btn.disabled = !canShift || uiControlsDisabled || isGameOver);
 }
 
 function onWindowResize() {
@@ -925,13 +890,9 @@ function onWindowResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function onDragStart() {
-  isReturningToHomeView = false;
-}
+function onDragStart() { isReturningToHomeView = false; }
 
-function resetView() {
-  isReturningToHomeView = true;
-}
+function resetView() { isReturningToHomeView = true; }
 
 function toggleInstructions(show) {
   const modal = document.getElementById('instructionsModal');
@@ -946,6 +907,35 @@ function toggleInstructions(show) {
     }
     updateStatus();
   }
+}
+
+function showConfirmDialog(message, onYesCallback) {
+  const modal = document.getElementById('confirmModal');
+  const msgElement = document.getElementById('confirmMessage');
+  const yesBtn = document.getElementById('confirmYes');
+  const noBtn = document.getElementById('confirmNo');
+
+  msgElement.textContent = message;
+
+  const newYesBtn = yesBtn.cloneNode(true);
+  yesBtn.parentNode.replaceChild(newYesBtn, yesBtn);
+
+  const newNoBtn = noBtn.cloneNode(true);
+  noBtn.parentNode.replaceChild(newNoBtn, noBtn);
+
+  newYesBtn.addEventListener('click', () => {
+    modal.style.display = 'none';
+    uiControlsDisabled = false;
+    onYesCallback();
+  });
+
+  newNoBtn.addEventListener('click', () => {
+    modal.style.display = 'none';
+    uiControlsDisabled = false;
+  });
+
+  modal.style.display = 'flex';
+  uiControlsDisabled = true;
 }
 
 function animate() {
@@ -964,13 +954,15 @@ function animate() {
 }
 
 function saveState() {
+  if (!currentGameConfig) return;
   const state = {
     board: JSON.parse(JSON.stringify(board)),
     currentPlayer: currentPlayer,
     gravity: gravity.clone(),
-    quaternion: gameGroup.quaternion.clone(),
+    quaternion: gameGroup ? gameGroup.quaternion.clone() : new THREE.Quaternion(),
     shiftCounts: { ...shiftCounts },
-    shiftCooldowns: { ...shiftCooldowns }
+    shiftCooldowns: { ...shiftCooldowns },
+    isGameOver: isGameOver
   };
   history.push(state);
 }
@@ -983,53 +975,69 @@ function undoMove() {
   if (uiControlsDisabled && !isGameOver) {
     return;
   }
-  if (isGameOver) {
-    isGameOver = false;
-    clearHighlightSpheres();
-  }
+  showConfirmDialog("Are you sure you want to undo the last move?", performUndo);
+}
+
+function performUndo() {
+  if (history.length === 0) return;
+
   const lastState = history.pop();
+
   board = lastState.board;
   currentPlayer = lastState.currentPlayer;
   gravity.copy(lastState.gravity);
-  gameGroup.quaternion.copy(lastState.quaternion);
+  if (gameGroup) gameGroup.quaternion.copy(lastState.quaternion);
   shiftCounts = lastState.shiftCounts;
   shiftCooldowns = lastState.shiftCooldowns;
-  for (let i = gameGroup.children.length - 1; i >= 0; i--) {
-    const obj = gameGroup.children[i];
-    if (obj.userData.isPiece || obj.userData.isPole) {
-      gameGroup.remove(obj);
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) obj.material.dispose();
-    }
+  isGameOver = lastState.isGameOver;
+
+  if (isGameOver) {
+    disableButtons();
+  } else {
+    clearHighlightSpheres();
   }
-  for (let y = 0; y < GRID; y++) {
-    for (let z = 0; z < GRID; z++) {
-      for (let x = 0; x < GRID; x++) {
-        const player = board[y][z][x];
-        if (player !== 0) {
-          const pos = get3DPosition(x, y, z);
-          const sphereGeo = new THREE.SphereGeometry(0.4, 32, 16);
-          const sphereMat = new THREE.MeshStandardMaterial({ color: colors[player], metalness: 0.3, roughness: 0.4 });
-          const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-          sphere.position.copy(pos);
-          sphere.castShadow = true;
-          sphere.receiveShadow = false;
-          sphere.userData.isPiece = true;
-          sphere.userData.boardX = x;
-          sphere.userData.boardY = y;
-          sphere.userData.boardZ = z;
-          gameGroup.add(sphere);
-          const pole = createSupportPole(sphere);
-          sphere.userData.pole = pole;
-          updateSupportPole(sphere, pole);
-          pole.visible = true;
-          gameGroup.add(pole);
+
+  if (gameGroup) {
+    for (let i = gameGroup.children.length - 1; i >= 0; i--) {
+      const obj = gameGroup.children[i];
+      if (obj.userData.isPiece || obj.userData.isPole) {
+        gameGroup.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      }
+    }
+    for (let y = 0; y < GRID; y++) {
+      for (let z = 0; z < GRID; z++) {
+        for (let x = 0; x < GRID; x++) {
+          const player = board[y][z][x];
+          if (player !== 0) {
+            const pos = get3DPosition(x, y, z);
+            const sphereGeo = new THREE.SphereGeometry(0.4, 32, 16);
+            const sphereMat = new THREE.MeshStandardMaterial({ color: colors[player], metalness: 0.3, roughness: 0.4 });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.copy(pos);
+            sphere.castShadow = true; sphere.receiveShadow = false; sphere.userData.isPiece = true;
+            sphere.userData.boardX = x; sphere.userData.boardY = y; sphere.userData.boardZ = z;
+            gameGroup.add(sphere);
+            const pole = createSupportPole(sphere);
+            sphere.userData.pole = pole;
+            updateSupportPole(sphere, pole);
+            pole.visible = true;
+            gameGroup.add(pole);
+          }
         }
       }
     }
   }
   updateAllGhostPolesVisibilityAndTransform();
   selectedCellForPlacement = null;
+  selectedRotation = null;
   hidePreviews();
-  enableButtons();
+  hideHighlight();
+
+  if (!isGameOver) {
+    enableButtons();
+  } else {
+    updateStatus();
+  }
 }
