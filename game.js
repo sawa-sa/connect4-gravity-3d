@@ -12,6 +12,8 @@ let gameGroup;
 let previewSphere;
 let uiControlsDisabled = false;
 
+let highlightPlane;
+
 let homeCameraPosition = new THREE.Vector3();
 let homeControlsTarget = new THREE.Vector3();
 let isReturningToHomeView = false;
@@ -21,7 +23,7 @@ const GHOST_POLE_RADIUS_FACTOR = 0.7;
 const GHOST_POLE_OPACITY = 0.15;
 
 let columnHighlightMesh;
-let selectedCellForPlacement = null; // ★ 配置場所選択中のセル情報 {boardX, boardY, boardZ}
+let selectedCellForPlacement = null;
 
 // --- 初期化とメインループ ---
 initBoard();
@@ -87,6 +89,13 @@ function initScene() {
 
   drawGrid3D();
 
+  const highlightGeo = new THREE.PlaneGeometry(GRID, GRID);
+  const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+  highlightPlane = new THREE.Mesh(highlightGeo, highlightMat);
+  highlightPlane.visible = false;
+  gameGroup.add(highlightPlane);
+
+
   const groundGeo = new THREE.PlaneGeometry(GRID, GRID);
   const groundMat = new THREE.ShadowMaterial({ opacity: 0.3 });
   const groundPlane = new THREE.Mesh(groundGeo, groundMat);
@@ -121,11 +130,86 @@ function initScene() {
   renderer.domElement.addEventListener('mousemove', onMouseMove);
   document.getElementById('resetButton').addEventListener('click', resetGame);
   document.getElementById('resetViewButton').addEventListener('click', resetView);
-  // ★ 説明ボタンのイベントリスナーを追加
   document.getElementById('instructionsButton').addEventListener('click', () => toggleInstructions(true));
 
+  const buttons = [
+    { id: 'btnRollLeft', axis: new THREE.Vector3(0, 0, 1), angle: Math.PI / 2 },
+    { id: 'btnRollRight', axis: new THREE.Vector3(0, 0, 1), angle: -Math.PI / 2 },
+    { id: 'btnTiltFwd', axis: new THREE.Vector3(1, 0, 0), angle: -Math.PI / 2 },
+    { id: 'btnTiltBack', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI / 2 },
+    { id: 'btnFlip', axis: new THREE.Vector3(1, 0, 0), angle: Math.PI }
+  ];
+
+  buttons.forEach(btnInfo => {
+    const buttonElement = document.getElementById(btnInfo.id);
+    if (buttonElement) {
+      buttonElement.addEventListener('mouseenter', () => showHighlight(btnInfo.axis, btnInfo.angle));
+      buttonElement.addEventListener('mouseleave', hideHighlight);
+    }
+  });
 
   updateStatus();
+}
+
+/**
+ * 回転後の底面をハイライト表示する
+ * @param {THREE.Vector3} rotationAxis 回転軸
+ * @param {number} angle 回転角度
+ */
+function showHighlight(rotationAxis, angle) {
+  if (uiControlsDisabled) return;
+
+  // 1. ボタンの回転を適用した場合の、キューブの未来の向きを計算
+  const currentQuaternion = gameGroup.quaternion.clone();
+  const rotationQuaternion = new THREE.Quaternion().setFromAxisAngle(rotationAxis, angle);
+  const targetQuaternion = currentQuaternion.multiply(rotationQuaternion);
+
+  // 2. 未来の向きから、どのローカル方向が「下」になるか計算
+  const worldDown = new THREE.Vector3(0, -1, 0);
+  let newLocalGravity = worldDown.clone().applyQuaternion(targetQuaternion.clone().invert());
+
+  // 3. 計算結果を最も近い軸方向に丸める (例: (0.99, 0.1, 0) -> (1, 0, 0))
+  let absX = Math.abs(newLocalGravity.x);
+  let absY = Math.abs(newLocalGravity.y);
+  let absZ = Math.abs(newLocalGravity.z);
+  let maxVal = Math.max(absX, absY, absZ);
+
+  if (maxVal === absX) newLocalGravity.set(Math.sign(newLocalGravity.x), 0, 0);
+  else if (maxVal === absY) newLocalGravity.set(0, Math.sign(newLocalGravity.y), 0);
+  else newLocalGravity.set(0, 0, Math.sign(newLocalGravity.z));
+
+  // 4. 新しい「下」方向に基づいてハイライト平面の位置と向きを決定
+  highlightPlane.rotation.set(0, 0, 0); // 回転をリセット
+  const halfGrid = GRID / 2 + 0.01; // グリッド線とのZ-fightingを防止
+
+  if (newLocalGravity.x === 1) { // 右面が底に
+    highlightPlane.position.set(halfGrid, 0, 0);
+    highlightPlane.rotation.y = -Math.PI / 2;
+  } else if (newLocalGravity.x === -1) { // 左面が底に
+    highlightPlane.position.set(-halfGrid, 0, 0);
+    highlightPlane.rotation.y = Math.PI / 2;
+  } else if (newLocalGravity.y === 1) { // 上面が底に
+    highlightPlane.position.set(0, halfGrid, 0);
+    highlightPlane.rotation.x = Math.PI / 2;
+  } else if (newLocalGravity.y === -1) { // 下面が底に
+    highlightPlane.position.set(0, -halfGrid, 0);
+    highlightPlane.rotation.x = -Math.PI / 2;
+  } else if (newLocalGravity.z === 1) { // 奥面が底に
+    highlightPlane.position.set(0, 0, halfGrid);
+    highlightPlane.rotation.y = 0;
+  } else if (newLocalGravity.z === -1) { // 手前面が底に
+    highlightPlane.position.set(0, 0, -halfGrid);
+    highlightPlane.rotation.y = Math.PI;
+  }
+
+  highlightPlane.visible = true;
+}
+
+/**
+ * ハイライトを非表示にする
+ */
+function hideHighlight() {
+  highlightPlane.visible = false;
 }
 
 
@@ -594,7 +678,6 @@ function rotateWorld(rotationAxis, angle) {
     })
     .then(() => {
       if (checkWin()) {
-        uiControlsDisabled = false;
         return;
       }
       switchPlayer();
@@ -706,6 +789,9 @@ function animateMotion(mesh, targetPosition, onComplete) {
   const loop = () => {
     if (mesh.position.distanceTo(targetPosition) > 0.01) {
       mesh.position.lerp(targetPosition, 0.15);
+      if (mesh.userData.isPiece && mesh.userData.pole) {
+        updateSupportPole(mesh, mesh.userData.pole);
+      }
       requestAnimationFrame(loop);
     } else {
       mesh.position.copy(targetPosition);
@@ -756,28 +842,138 @@ function applyGravity() {
 /**
  * 勝敗を判定する関数
  */
+let highlightSpheres = [];
+
 function checkWin() {
-  const directions = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1], [1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]];
+  const directions = [
+    [1, 0, 0], [0, 1, 0], [0, 0, 1],
+    [1, 1, 0], [1, -1, 0], [1, 0, 1], [1, 0, -1], [0, 1, 1], [0, 1, -1],
+    [1, 1, 1], [1, 1, -1], [1, -1, 1], [-1, 1, 1]
+  ];
+
+  let count1 = 0;
+  let count2 = 0;
+  const visited = new Set();
+  const lines1 = [];
+  const lines2 = [];
+
   for (let y = 0; y < GRID; y++) {
     for (let z = 0; z < GRID; z++) {
       for (let x = 0; x < GRID; x++) {
         const player = board[y][z][x];
         if (player === 0) continue;
-        for (const [dy, dz, dx] of directions) {
-          let count = 0;
-          for (let i = 0; i < GRID; i++) {
-            const ny = y + i * dy, nz = z + i * dz, nx = x + i * dx;
-            if (ny >= 0 && ny < GRID && nz >= 0 && nz < GRID && nx >= 0 && nx < GRID && board[ny][nz][nx] === player) {
-              count++;
-            } else { break; }
+
+        for (const [dx, dy, dz] of directions) {
+          let positions = [];
+          let valid = true;
+          for (let i = 0; i < 4; i++) {
+            const nx = x + dx * i;
+            const ny = y + dy * i;
+            const nz = z + dz * i;
+            if (nx < 0 || ny < 0 || nz < 0 || nx >= GRID || ny >= GRID || nz >= GRID) {
+              valid = false;
+              break;
+            }
+            if (board[ny][nz][nx] !== player) {
+              valid = false;
+              break;
+            }
+            positions.push({ x: nx, y: ny, z: nz });
           }
-          if (count === GRID) { setTimeout(() => alert(`Player ${player} wins!`), 100); return true; }
+
+          const key = positions.map(p => `${p.x},${p.y},${p.z}`).sort().join('|');
+          if (valid && !visited.has(key)) {
+            visited.add(key);
+            if (player === 1) {
+              count1++;
+              lines1.push(positions);
+            } else {
+              count2++;
+              lines2.push(positions);
+            }
+          }
         }
       }
     }
   }
+
+  highlightLines(lines1);
+  highlightLines(lines2);
+
+  // ★ MODIFIED: 不要なライン数表示を削除
+  const statusElem = document.getElementById("status");
+
+  if (count1 > 0 || count2 > 0) {
+    let message = "";
+    let winnerHexColor = "#FFFF00";
+
+    if (count1 > count2) {
+      message = `Red wins with ${count1} line(s)!`;
+      winnerHexColor = "#" + colors[1].toString(16).padStart(6, '0');
+    } else if (count2 > count1) {
+      message = `Blue wins with ${count2} line(s)!`;
+      winnerHexColor = "#" + colors[2].toString(16).padStart(6, '0');
+    } else {
+      message = `Draw! Both players have ${count1} line(s).`;
+    }
+    alert(message);
+    if (statusElem) {
+      statusElem.innerHTML = `<strong style="color: ${winnerHexColor};">${message}</strong>`;
+    }
+    disableButtons();
+    return true;
+  }
   return false;
 }
+
+function highlightLines(lines) {
+  lines.forEach(positions => {
+    positions.forEach(({ x, y, z }) => {
+      const foundPiece = gameGroup.children.find(obj =>
+        obj.userData.isPiece &&
+        obj.userData.boardX === x &&
+        obj.userData.boardY === y &&
+        obj.userData.boardZ === z
+      );
+      if (foundPiece && foundPiece.material) {
+        foundPiece.material.emissive.copy(foundPiece.material.color);
+        foundPiece.material.emissiveIntensity = 1.0;
+        highlightSpheres.push(foundPiece);
+      }
+    });
+  });
+}
+
+function disableButtons() {
+  const buttons = document.querySelectorAll('#ui button');
+  buttons.forEach(btn => {
+    if (btn.id !== 'resetButton' && btn.id !== 'resetViewButton') {
+      btn.disabled = true;
+    }
+  });
+  uiControlsDisabled = true;
+}
+
+function enableButtons() {
+  const buttons = document.querySelectorAll('#ui button');
+  buttons.forEach(btn => {
+    btn.disabled = false;
+  });
+  uiControlsDisabled = false;
+}
+
+function clearHighlightSpheres() {
+  highlightSpheres.forEach(sphere => {
+    if (sphere.material) {
+      sphere.material.emissive.set(0x000000);
+      sphere.material.emissiveIntensity = 0;
+    }
+  });
+  highlightSpheres = [];
+}
+
+
+
 
 /**
  * ヘルパー関数: 現在のローカル重力ベクトルから主軸と方向を取得
@@ -802,19 +998,24 @@ function getGravityAxisAndDirFromVec(gravityVector) {
  * ゲームをリセットする関数
  */
 function resetGame() {
-  if (uiControlsDisabled) return;
-  uiControlsDisabled = true;
+  if (uiControlsDisabled && !document.getElementById('resetButton').disabled) {
+  } else if (uiControlsDisabled) {
+    return;
+  }
+
   isReturningToHomeView = false;
   selectedCellForPlacement = null;
   hidePreviews();
+  clearHighlightSpheres();
+  enableButtons();
 
   const targetQuaternion = new THREE.Quaternion();
   animateRotation(targetQuaternion).then(() => {
     const objectsToRemove = gameGroup.children.filter(obj => obj.userData.isPiece || obj.userData.isPole || obj.userData.isGhostPole);
     objectsToRemove.forEach(obj => {
+      if (obj.parent) obj.parent.remove(obj);
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
-      gameGroup.remove(obj);
     });
 
     initBoard();
@@ -822,7 +1023,6 @@ function resetGame() {
     updateAllGhostPolesVisibilityAndTransform();
 
     updateStatus();
-    uiControlsDisabled = false;
     isReturningToHomeView = true;
   });
 }
@@ -831,9 +1031,13 @@ function resetGame() {
  * 画面上のステータス表示を更新する関数
  */
 function updateStatus() {
+  if (uiControlsDisabled && !document.getElementById('resetButton').disabled) {
+    return
+  }
   const playerColor = currentPlayer === 1 ? 'Red' : 'Blue';
-  const gravStr = `(${gravity.x.toFixed(0)}, ${gravity.y.toFixed(0)}, ${gravity.z.toFixed(0)})`;
-  let statusText = `Player: <strong style="color: ${colors[currentPlayer]}">${playerColor}</strong> | Cube's Down: ${gravStr}`;
+  const playerHexColor = currentPlayer === 1 ? colors[1].toString(16).padStart(6, '0') : colors[2].toString(16).padStart(6, '0');
+  //const gravStr = `(${gravity.x.toFixed(0)}, ${gravity.y.toFixed(0)}, ${gravity.z.toFixed(0)})`;
+  let statusText = `Player: <strong style="color: #${playerHexColor}">${playerColor}</strong>`;
   if (selectedCellForPlacement) {
     statusText += " | Click again on highlighted column to place piece.";
   }
@@ -860,22 +1064,20 @@ function onDragStart() {
  * 「視点をリセット」ボタンが押されたときに呼ばれる関数
  */
 function resetView() {
-  if (uiControlsDisabled) return;
   isReturningToHomeView = true;
 }
 
 /**
- * ★ 説明表示をトグルする関数
- * @param {boolean} show trueなら表示、falseなら非表示
+ * 説明表示をトグルする関数
  */
 function toggleInstructions(show) {
   const modal = document.getElementById('instructionsModal');
   if (modal) {
     modal.style.display = show ? 'flex' : 'none';
-    uiControlsDisabled = show; // 説明表示中はゲーム操作を無効化
+    uiControlsDisabled = show;
     if (show) {
-      isReturningToHomeView = false; // 説明表示中は視点リセットを止める
-      selectedCellForPlacement = null; // 選択状態も解除
+      isReturningToHomeView = false;
+      selectedCellForPlacement = null;
       hidePreviews();
       updateStatus();
     }

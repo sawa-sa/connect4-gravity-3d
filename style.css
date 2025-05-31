@@ -47,14 +47,6 @@ body {
   margin-bottom: 0;
 }
 
-/* ★ 言語選択ボタンのグループ用のスタイルを追加 */
-.language-controls {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #555;
-  /* 他のコントロールグループとの区切り線 */
-}
-
 #ui button {
   background-color: #4CAF50;
   /* Green */
@@ -74,17 +66,6 @@ body {
 #ui button:hover {
   background-color: #45a049;
 }
-
-/* ★ 言語選択ボタンに少し異なるスタイルを適用したい場合は、以下のように指定できます */
-/*
-.language-controls button {
-  background-color: #007bff; // 例えば青色に
-  padding: 6px 12px; // 少し小さめに
-}
-.language-controls button:hover {
-  background-color: #0056b3;
-}
-*/
 
 #status {
   margin-top: 10px;
@@ -180,4 +161,10 @@ body {
 
 .modal-content strong {
   color: #ffc107;
+}
+
+/* ★ ADDED: スタイルを無効化されたボタンに適用 */
+#ui button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
 }

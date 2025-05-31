@@ -14,10 +14,11 @@
   <div id="ui">
     <div class="control-group">
       <strong>Rotate Cube:</strong>
-      <button onclick="rotateWorld(new THREE.Vector3(0, 0, 1), Math.PI / 2)">Roll Left</button>
-      <button onclick="rotateWorld(new THREE.Vector3(0, 0, 1), -Math.PI / 2)">Roll Right</button>
-      <button onclick="rotateWorld(new THREE.Vector3(1, 0, 0), -Math.PI / 2)">Tilt Forward</button>
-      <button onclick="rotateWorld(new THREE.Vector3(1, 0, 0), Math.PI / 2)">Tilt Backward</button>
+      <button id="btnRollLeft" onclick="rotateWorld(new THREE.Vector3(0, 0, 1), Math.PI / 2)">←</button>
+      <button id="btnRollRight" onclick="rotateWorld(new THREE.Vector3(0, 0, 1), -Math.PI / 2)">→</button>
+      <button id="btnTiltFwd" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), -Math.PI / 2)">↑</button>
+      <button id="btnTiltBack" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), Math.PI / 2)">↓</button>
+      <button id="btnFlip" onclick="rotateWorld(new THREE.Vector3(1, 0, 0), Math.PI)">↕</button>
     </div>
     <div class="control-group">
       <button id="resetButton">Reset Game</button>
@@ -31,20 +32,26 @@
     <div class="modal-content">
       <span class="close-button" onclick="toggleInstructions(false)">&times;</span>
       <h2>Game Instructions</h2>
-      <p><strong>Objective:</strong> Be the first player to get 4 of your pieces in a row - horizontally, vertically, or diagonally in any 3D plane.</p>
+      <p><strong>Objective:</strong> Be the first player to get 4 of your pieces in a row - horizontally, vertically, or
+        diagonally in any 3D plane.</p>
       <p><strong>How to Play:</strong></p>
       <ul>
         <li>Players take turns placing their pieces (Red or Blue) into the 4x4x4 grid.</li>
-        <li>On your turn, hover your mouse over the grid. A highlighted column and a preview sphere will show where your piece will be placed if you click.</li>
+        <li>On your turn, hover your mouse over the grid. A highlighted column and a preview sphere will show where your
+          piece will be placed if you click.</li>
         <li><strong>Two-Step Placement:</strong>
           <ol>
-            <li>Click once on a highlighted column to select it as your placement target. The column and preview sphere will remain fixed.</li>
+            <li>Click once on a highlighted column to select it as your placement target. The column and preview sphere
+              will remain fixed.</li>
             <li>Click again on the same highlighted column to confirm and place your piece.</li>
-            <li>If you click a different valid column after the first click, your selection will change to the new column.</li>
+            <li>If you click a different valid column after the first click, your selection will change to the new
+              column.</li>
             <li>If you click an invalid area after the first click, your selection will be cancelled.</li>
           </ol>
         </li>
-        <li><strong>Rotate Cube:</strong> Use the "Rotate Cube" buttons to change the direction of gravity. This will cause all pieces on the board to shift according to the new "down" direction. This can be a strategic move to align your pieces or block your opponent.</li>
+        <li><strong>Rotate Cube:</strong> Use the "Rotate Cube" buttons to change the direction of gravity. This will
+          cause all pieces on the board to shift according to the new "down" direction. This can be a strategic move to
+          align your pieces or block your opponent.</li>
       </ul>
       <p><strong>Controls:</strong></p>
       <ul>
