@@ -23,6 +23,7 @@
     <div class="control-group">
       <button id="resetButton">Reset Game</button>
       <button id="resetViewButton">Reset View</button>
+      <button id="undoButton">Undo Move</button>
       <button id="instructionsButton">Show Instructions</button>
     </div>
     <div id="status"></div>
@@ -34,7 +35,8 @@
       <h2>Game Instructions</h2>
       <p><strong>Objective:</strong> Be the first player to get 4 of your pieces in a row - horizontally, vertically, or
         diagonally in any 3D plane.</p>
-      <p><strong>How to Play:</strong></p>
+
+      <h3>How to Play</h3>
       <ul>
         <li>Players take turns placing their pieces (Red or Blue) into the 4x4x4 grid.</li>
         <li>On your turn, hover your mouse over the grid. A highlighted column and a preview sphere will show where your
@@ -49,14 +51,39 @@
             <li>If you click an invalid area after the first click, your selection will be cancelled.</li>
           </ol>
         </li>
-        <li><strong>Rotate Cube:</strong> Use the "Rotate Cube" buttons to change the direction of gravity. This will
-          cause all pieces on the board to shift according to the new "down" direction. This can be a strategic move to
-          align your pieces or block your opponent.</li>
+        <li><strong>Rotate Cube (Gravity Shift):</strong> Use the "Rotate Cube" buttons to change the direction of
+          gravity. This will
+          cause all pieces on the board to shift according to the new "down" direction. This is a powerful strategic
+          move.</li>
       </ul>
-      <p><strong>Controls:</strong></p>
+
+      <h3>Game Balance &amp; Strategy</h3>
+      <p>
+        The rules for gravity shifting have been carefully balanced to make the game more strategic:
+      </p>
+      <ul>
+        <li>
+          <strong>3 Shifts per Game:</strong> You have three shifts in total. This number is small enough to make each
+          use a critical decision, but large enough to allow for flexibility in your strategy throughout the early,
+          middle, and late game.
+        </li>
+        <li>
+          <strong>2-Turn Cooldown:</strong> After shifting, you must wait for two of your own turns before you can shift
+          again. This forces you to commit to the new gravity direction and play through the consequences, preventing
+          constant, chaotic changes to the board.
+        </li>
+        <li>
+          <strong>Shift Replaces Placement:</strong> Using a shift costs your entire turn; you cannot place a piece.
+          This makes the decision to shift a significant trade-off between altering the board and developing your
+          position.
+        </li>
+      </ul>
+
+      <h3>Controls</h3>
       <ul>
         <li><strong>Mouse Drag:</strong> Click and drag to rotate your view of the cube.</li>
         <li><strong>Reset View:</strong> Returns your camera view to the default starting position.</li>
+        <li><strong>Undo Move:</strong> Reverts the last move (either placing a piece or shifting gravity).</li>
         <li><strong>Reset Game:</strong> Clears the board and starts a new game.</li>
       </ul>
       <p>Good luck!</p>
