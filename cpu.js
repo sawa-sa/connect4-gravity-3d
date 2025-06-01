@@ -159,9 +159,18 @@ const cpu = {
     const opponent = 3 - player;
     let score = 0;
 
+    // 勝利・敗北のチェック
     if (this.checkForWin(board, player, winLength)) return Infinity;
     if (this.checkForWin(board, opponent, winLength)) return -Infinity;
 
+    // ★★★ここからが追加されたロジック★★★
+    // 盤面が埋まっている場合（=引き分け）はスコアを0とする
+    if (this.isBoardFull(board)) {
+      return 0;
+    }
+    // ★★★追加ロジックここまで★★★
+
+    // 脅威の計算（既存のロジック）
     const myThreats = this.countThreats(board, player, winLength);
     const opponentThreats = this.countThreats(board, opponent, winLength);
 
@@ -263,6 +272,20 @@ const cpu = {
     } else {
       return this.getBoardAfterRotation(board, move.axis, move.angle);
     }
+  },
+
+  isBoardFull(board) {
+    const gridSize = board.length;
+    for (let y = 0; y < gridSize; y++) {
+      for (let z = 0; z < gridSize; z++) {
+        for (let x = 0; x < gridSize; x++) {
+          if (board[y][z][x] === 0) {
+            return false; // 空きマスがあれば引き分けではない
+          }
+        }
+      }
+    }
+    return true; // 空きマスがなければ盤面は埋まっている
   },
 
   getAllPossiblePlacements(board) {
