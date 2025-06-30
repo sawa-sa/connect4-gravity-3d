@@ -1,0 +1,13 @@
+feat: Add mobile support for touch interactions and responsive UI
+
+This commit introduces mobile support to the Connect4 Gravity 3D game.
+
+- **game.js**:
+  - Added touch event listeners (`touchstart`, `touchmove`, `touchend`) to the Three.js renderer element.
+  - Implemented `onTouchStart`, `onTouchMove`, and `onTouchEnd` functions to translate touch events into simulated mouse events, allowing existing `onClick` and `onMouseMove` handlers to function with touch input.
+  - `event.preventDefault()` is used in touch handlers to prevent default browser behaviors like scrolling.
+
+- **style.css**:
+  - Added `@media (max-width: 768px)` queries to adjust UI elements for smaller screens.
+  - Increased padding and adjusted font sizes for menu elements, buttons, and status messages to improve touch usability and readability on mobile devices.
+  - Adjusted modal content width and padding for better mobile display.
