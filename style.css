@@ -238,3 +238,53 @@ body {
 #confirmNo:hover {
   background-color: #da190b;
 }
+
+@media (max-width: 768px) {
+  .menu {
+    padding: 20px;
+    width: 90%;
+  }
+
+  .menu h1 {
+    font-size: 2em;
+  }
+
+  .menu select,
+  .menu button {
+    font-size: 14px;
+    padding: 8px 15px;
+  }
+
+  #ui {
+    padding: 8px;
+  }
+
+  #ui button {
+    padding: 6px 12px;
+    font-size: 12px;
+    margin: 3px 1px;
+  }
+
+  #status {
+    font-size: 14px;
+  }
+
+  .modal-content {
+    width: 95%;
+    padding: 20px;
+  }
+
+  .modal-content h2 {
+    font-size: 1.5em;
+  }
+
+  .modal-content p,
+  .modal-content li {
+    font-size: 0.9em;
+  }
+
+  .confirm-buttons button {
+    padding: 8px 20px;
+    font-size: 14px;
+  }
+}

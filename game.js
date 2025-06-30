@@ -143,6 +143,9 @@ function initScene() {
   window.addEventListener('resize', onWindowResize);
   renderer.domElement.addEventListener('click', onClick);
   renderer.domElement.addEventListener('mousemove', onMouseMove);
+  renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+  renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+  renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
 
   document.getElementById('backToMenuButton').addEventListener('click', () => {
     showConfirmDialog("Are you sure you want to return to the menu? The current game will be lost.", showMenu);
@@ -564,10 +567,10 @@ function updateSupportPole(pieceMesh, poleMesh) { const piecePos = pieceMesh.pos
 function getIntersectPoint(event) { if (uiControlsDisabled || !gameGroup) return null; const rect = renderer.domElement.getBoundingClientRect(); const mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(mouse, camera); const invMatrix = new THREE.Matrix4().copy(gameGroup.matrixWorld).invert(); const localRay = new THREE.Ray().copy(raycaster.ray).applyMatrix4(invMatrix); const boundingBox = new THREE.Box3(new THREE.Vector3(-GRID / 2, -GRID / 2, -GRID / 2), new THREE.Vector3(GRID / 2, GRID / 2, GRID / 2)); return localRay.intersectBox(boundingBox, new THREE.Vector3()); }
 function updatePreviewsForSelection() { if (selectedCellForPlacement) { const { boardX, boardY, boardZ } = selectedCellForPlacement; previewSphere.position.copy(get3DPosition(boardX, boardY, boardZ)); previewSphere.material.color.set(colors[currentPlayer]); previewSphere.visible = true; const { axis: gravityAxis } = getGravityAxisAndDir(); const columnCenter = new THREE.Vector3(); if (gravityAxis === 'y') { columnCenter.set(get3DPosition(boardX, 0, boardZ).x, 0, get3DPosition(boardX, 0, boardZ).z); } else if (gravityAxis === 'x') { columnCenter.set(0, get3DPosition(0, boardY, boardZ).y, get3DPosition(0, boardY, boardZ).z); } else { columnCenter.set(get3DPosition(boardX, boardY, 0).x, get3DPosition(boardX, boardY, 0).y, 0); } columnHighlightMesh.position.copy(columnCenter); columnHighlightMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate()); columnHighlightMesh.visible = true; } }
 function hidePreviews() { if (previewSphere) previewSphere.visible = false; if (columnHighlightMesh) columnHighlightMesh.visible = false; }
-function onMouseMove(event) { console.log("[Debug] onMouseMove - Current Gravity:", gravity.x.toFixed(2), gravity.y.toFixed(2), gravity.z.toFixed(2)); if (selectedCellForPlacement || uiControlsDisabled || isGameOver || selectedRotation || (player2IsCPU && currentPlayer === 2)) { hidePreviews(); return; } const point = getIntersectPoint(event); if (point) { const { axis: gravityAxis, dir: gravityDir } = getGravityAxisAndDir(); let cX, cY, cZ; if (gravityAxis === 'y') { cX = Math.floor(point.x + GRID / 2); cZ = Math.floor(point.z + GRID / 2); } else if (gravityAxis === 'x') { cY = Math.floor(point.y + GRID / 2); cZ = Math.floor(point.z + GRID / 2); } else { cX = Math.floor(point.x + GRID / 2); cY = Math.floor(point.y + GRID / 2); } let landingCellFound = false; for (let i = 0; i < GRID; i++) { const w = (gravityDir === -1) ? i : GRID - 1 - i; const checkPos = {}; if (gravityAxis === 'y') { checkPos.x = cX; checkPos.y = w; checkPos.z = cZ; } else if (gravityAxis === 'x') { checkPos.x = w; checkPos.y = cY; checkPos.z = cZ; } else { checkPos.x = cX; checkPos.y = cY; checkPos.z = w; } if (checkPos.x >= 0 && checkPos.x < GRID && checkPos.y >= 0 && checkPos.y < GRID && checkPos.z >= 0 && checkPos.z < GRID) { if (board[checkPos.y][checkPos.z][checkPos.x] === 0) { previewSphere.position.copy(get3DPosition(checkPos.x, checkPos.y, checkPos.z)); previewSphere.material.color.set(colors[currentPlayer]); previewSphere.visible = true; landingCellFound = true; const columnCenter = new THREE.Vector3(); if (gravityAxis === 'y') { columnCenter.set(get3DPosition(checkPos.x, 0, checkPos.z).x, 0, get3DPosition(checkPos.x, 0, checkPos.z).z); } else if (gravityAxis === 'x') { columnCenter.set(0, get3DPosition(0, checkPos.y, checkPos.z).y, get3DPosition(0, checkPos.y, checkPos.z).z); } else { columnCenter.set(get3DPosition(checkPos.x, checkPos.y, 0).x, get3DPosition(checkPos.x, checkPos.y, 0).y, 0); } columnHighlightMesh.position.copy(columnCenter); columnHighlightMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate()); columnHighlightMesh.visible = true; break; } } } if (!landingCellFound) hidePreviews(); } else { hidePreviews(); } }
+function onMouseMove(event) { console.log("[Debug] onMouseMove - Current Gravity:", gravity.x.toFixed(2), gravity.y.toFixed(2), gravity.z.toFixed(2)); if (selectedCellForPlacement || uiControlsDisabled || isGameOver || selectedRotation || (player2IsCPU && currentPlayer === 2)) { hidePreviews(); return; } const point = getIntersectPoint(event); if (point) { const { axis: gravityAxis, dir: gravityDir } = getGravityAxisAndDir(); let cX, cY, cZ; if (gravityAxis === 'y') { cX = Math.floor(point.x + GRID / 2); cZ = Math.floor(point.z + GRID / 2); } else if (gravityAxis === 'x') { cY = Math.floor(point.y + GRID / 2); cZ = Math.floor(point.z + GRID / 2); } else { cX = Math.floor(point.x + GRID / 2); cY = Math.floor(point.y + GRID / 2); } let landingCellFound = false; for (let i = 0; i < GRID; i++) { const w = (gravityDir === -1) ? i : GRID - 1 - i; const checkPos = {}; if (gravityAxis === 'y') { checkPos.x = cX; checkPos.y = w; checkPos.z = cZ; } else if (gravityAxis === 'x') { checkPos.x = w; checkPos.y = cY; checkPos.z = cZ; } else { checkPos.x = cX; checkPos.y = cY; checkPos.z = w; } if (checkPos.x >= 0 && checkPos.x < GRID && checkPos.y >= 0 && checkPos.y < GRID && checkPos.z >= 0 && checkPos.z < GRID) { if (board[checkPos.y][checkPos.z][checkPos.x] === 0) { previewSphere.position.copy(get3DPosition(checkPos.x, checkPos.y, checkPos.z)); previewSphere.material.color.set(colors[currentPlayer]); previewSphere.visible = true; landingCellFound = true; const columnCenter = new THREE.Vector3(); if (gravityAxis === 'y') { columnCenter.set(get3DPosition(checkPos.x, 0, checkPos.z).x, 0, get3DPosition(checkPos.x, 0, checkPos.z).z); } else if (gravityAxis === 'x') { columnCenter.set(0, get3DPosition(0, checkPos.y, checkPos.z).y, get3DPosition(0, checkPos.y, checkPos.z).z); } else { columnCenter.set(get3DPosition(checkPos.x, checkPos.y, 0).x, get3DPosition(checkPos.x, checkPos.y, 0).y, 0); } columnHighlightMesh.position.copy(columnCenter); columnHighlightMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gravity.clone().negate()); columnHighlightMesh.visible = true; } } } if (!landingCellFound) { hidePreviews(); } } else { hidePreviews(); } }
 function animateRotationHint(axis, mainRotationAngle, initialQuaternion) { return new Promise(resolve => { const hintAngle = Math.sign(mainRotationAngle) * Math.PI / 18; const hintSpeed = 0.25; const qHintTarget = initialQuaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(axis, hintAngle)); const qInitial = initialQuaternion.clone(); let phase = 0; const loopHint = () => { let currentTargetQuaternion = (phase === 0) ? qHintTarget : qInitial; if (gameGroup.quaternion.angleTo(currentTargetQuaternion) > 0.01) { gameGroup.quaternion.slerp(currentTargetQuaternion, hintSpeed); requestAnimationFrame(loopHint); } else { gameGroup.quaternion.copy(currentTargetQuaternion); if (phase === 0) { phase = 1; requestAnimationFrame(loopHint); } else { resolve(); } } }; loopHint(); }); }
 function animateRotation(targetQuaternion) { return new Promise(resolve => { const mainRotationSpeed = 0.15; const loop = () => { if (gameGroup.quaternion.angleTo(targetQuaternion) > 0.01) { gameGroup.quaternion.slerp(targetQuaternion, mainRotationSpeed); requestAnimationFrame(loop); } else { gameGroup.quaternion.copy(targetQuaternion); resolve(); } }; loop(); }); }
-async function animateBoardUpdate() { if (!gameGroup) return; applyGravity(); const currentPieces = gameGroup.children.filter(obj => obj.userData.isPiece); const targetPieceData = []; for (let y = 0; y < GRID; y++) { for (let z = 0; z < GRID; z++) { for (let x = 0; x < GRID; x++) { if (board[y][z][x] !== 0) { targetPieceData.push({ pos: get3DPosition(x, y, z), player: board[y][z][x], boardX: x, boardY: y, boardZ: z }); } } } } const animationPromises = []; const unassignedPieces = [...currentPieces]; for (const target of targetPieceData) { let pieceToMove = null; let poleToMove = null; let pieceIndex = -1; const { axis: gravityAxis } = getGravityAxisAndDir(); for (let i = 0; i < unassignedPieces.length; i++) { const piece = unassignedPieces[i]; let match = piece.material.color.getHex() === colors[target.player]; if (gravityAxis === 'y') match = match && piece.userData.boardX === target.boardX && piece.userData.boardZ === target.boardZ; else if (gravityAxis === 'x') match = match && piece.userData.boardY === target.boardY && piece.userData.boardZ === target.boardZ; else match = match && piece.userData.boardX === target.boardX && piece.userData.boardY === target.boardY; if (match) { pieceToMove = piece; poleToMove = piece.userData.pole; pieceIndex = i; break; } } if (!pieceToMove) { for (let i = 0; i < unassignedPieces.length; i++) { const piece = unassignedPieces[i]; if (piece.material.color.getHex() === colors[target.player]) { pieceToMove = piece; poleToMove = piece.userData.pole; pieceIndex = i; break; } } } if (pieceToMove && poleToMove) { animationPromises.push(new Promise(resolve => { animateMotion(pieceToMove, target.pos, () => { updateSupportPole(pieceToMove, poleToMove); poleToMove.visible = true; resolve(); }); })); pieceToMove.userData.boardX = target.boardX; pieceToMove.userData.boardY = target.boardY; pieceToMove.userData.boardZ = target.boardZ; unassignedPieces.splice(pieceIndex, 1); } } unassignedPieces.forEach(piece => { if (piece.userData.pole) gameGroup.remove(piece.userData.pole); gameGroup.remove(piece); if (piece.geometry) piece.geometry.dispose(); if (piece.material) piece.material.dispose(); if (piece.userData.pole && piece.userData.pole.geometry) piece.userData.pole.geometry.dispose(); if (piece.userData.pole && piece.userData.pole.material) piece.userData.pole.material.dispose(); }); await Promise.all(animationPromises); updateAllGhostPolesVisibilityAndTransform(); }
+async function animateBoardUpdate() { if (!gameGroup) return; applyGravity(); const currentPieces = gameGroup.children.filter(obj => obj.userData.isPiece); const targetPieceData = []; for (let y = 0; y < GRID; y++) { for (let z = 0; z < GRID; z++) { for (let x = 0; x < GRID; x++) { if (board[y][z][x] !== 0) { targetPieceData.push({ pos: get3DPosition(x, y, z), player: board[y][z][x], boardX: x, boardY: y, boardZ: z }); } } } } const animationPromises = []; const unassignedPieces = [...currentPieces]; for (const target of targetPieceData) { let pieceToMove = null; let poleToMove = null; let pieceIndex = -1; const { axis: gravityAxis } = getGravityAxisAndDir(); for (let i = 0; i < unassignedPieces.length; i++) { const piece = unassignedPieces[i]; let match = piece.material.color.getHex() === colors[target.player]; if (gravityAxis === 'y') match = match && piece.userData.boardX === target.boardX && piece.userData.boardZ === target.boardZ; else if (gravityAxis === 'x') match = match && piece.userData.boardY === target.boardY && piece.userData.boardZ === target.boardZ; else match = match && piece.userData.boardX === target.boardX && piece.userData.boardY === target.boardY; if (match) { pieceToMove = piece; poleToMove = piece.userData.pole; pieceIndex = i; break; } } if (!pieceToMove) { for (let i = 0; i < unassignedPieces.length; i++) { const piece = unassignedPieces[i]; if (piece.material.color.getHex() === colors[target.player]) { pieceToMove = piece; poleToMove = piece.userData.pole; pieceIndex = i; break; } } } if (pieceToMove && poleToMove) { animationPromises.push(new Promise(resolve => { animateMotion(pieceToMove, target.pos, () => { updateSupportPole(pieceToMove, poleToMove); poleToMove.visible = true; resolve(); }); })); pieceToMove.userData.boardX = target.boardX; pieceToMove.userData.boardY = target.boardY; pieceToMove.userData.boardZ = target.boardZ; unassignedPieces.splice(pieceIndex, 1); } } unassignedPieces.forEach(piece => { if (piece.userData.pole) gameGroup.remove(piece.userData.pole); gameGroup.remove(piece); }); await Promise.all(animationPromises); updateAllGhostPolesVisibilityAndTransform(); }
 function animateMotion(mesh, targetPosition, onComplete) { const loop = () => { if (mesh.position.distanceTo(targetPosition) > 0.01) { mesh.position.lerp(targetPosition, 0.15); if (mesh.userData.isPiece && mesh.userData.pole) { updateSupportPole(mesh, mesh.userData.pole); } requestAnimationFrame(loop); } else { mesh.position.copy(targetPosition); if (onComplete) onComplete(); } }; loop(); }
 function applyGravity() { board = applyGravityToBoard(board, gravity); }
 
@@ -843,4 +846,64 @@ function performCPUMove_place(x, y, z) {
 }
 function performCPUMove_rotate(axis, angle) {
   executeRotation(axis, angle);
+}
+
+// --- Touch Event Handlers for Mobile ---
+let touchStartX = 0;
+let touchStartY = 0;
+let isDragging = false;
+
+function onTouchStart(event) {
+  if (event.touches.length > 1) return; // Multi-touch not supported for game interaction
+
+  event.preventDefault(); // Prevent scrolling
+  const touch = event.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  isDragging = false;
+
+  // Simulate mousemove for initial preview
+  onMouseMove({
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    target: renderer.domElement
+  });
+}
+
+function onTouchMove(event) {
+  if (event.touches.length > 1) return;
+
+  event.preventDefault(); // Prevent scrolling
+  const touch = event.touches[0];
+  const deltaX = touch.clientX - touchStartX;
+  const deltaY = touch.clientY - touchStartY;
+
+  // If significant drag, assume camera control
+  if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+    isDragging = true;
+    // OrbitControls handles touchmove automatically if enabled
+  } else {
+    // Simulate mousemove for preview
+    onMouseMove({
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      target: renderer.domElement
+    });
+  }
+}
+
+function onTouchEnd(event) {
+  if (uiControlsDisabled || isGameOver || (player2IsCPU && currentPlayer === 2)) return;
+
+  // If not dragging, simulate a click
+  if (!isDragging) {
+    // Use the last touch position from touchstart/touchmove for click
+    onClick({
+      clientX: touchStartX,
+      clientY: touchStartY,
+      target: renderer.domElement
+    });
+  }
+  isDragging = false;
+  hidePreviews(); // Hide preview sphere after touch ends
 }
