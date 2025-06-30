@@ -679,10 +679,10 @@ function clearHighlightSpheres() { highlightSpheres.forEach(sphere => { if (sphe
 function getGravityAxisAndDir() { return getGravityAxisAndDirFromVec(gravity); }
 function getGravityAxisAndDirFromVec(gravityVector) { let axis = 'y'; if (Math.abs(gravityVector.x) > Math.abs(gravityVector.y) && Math.abs(gravityVector.x) > Math.abs(gravityVector.z)) axis = 'x'; else if (Math.abs(gravityVector.z) > Math.abs(gravityVector.y)) axis = 'z'; const dir = Math.sign(gravityVector[axis]); return { axis, dir }; }
 function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
-function resetView() { isReturningToHomeView = true; }
+function resetView() { isReturningToHomeView = true; controls.enabled = false; }
 function toggleInstructions(show) { const modal = document.getElementById('instructionsModal'); if (modal) { modal.style.display = show ? 'flex' : 'none'; setUiControlsDisabled(show, false); updateStatus(); } }
 function showConfirmDialog(message, onYesCallback) { const modal = document.getElementById('confirmModal'); const msgElement = document.getElementById('confirmMessage'); const yesBtn = document.getElementById('confirmYes'); const noBtn = document.getElementById('confirmNo'); msgElement.textContent = message; const newYesBtn = yesBtn.cloneNode(true); yesBtn.parentNode.replaceChild(newYesBtn, yesBtn); const newNoBtn = noBtn.cloneNode(true); noBtn.parentNode.replaceChild(newNoBtn, noBtn); newYesBtn.addEventListener('click', () => { modal.style.display = 'none'; setUiControlsDisabled(false); onYesCallback(); }); newNoBtn.addEventListener('click', () => { modal.style.display = 'none'; setUiControlsDisabled(false); updateStatus(); }); modal.style.display = 'flex'; setUiControlsDisabled(true); }
-function animate() { requestAnimationFrame(animate); if (isReturningToHomeView) { camera.position.lerp(homeCameraPosition, 0.1); controls.target.lerp(homeControlsTarget, 0.1); if (camera.position.distanceTo(homeCameraPosition) < 0.01 && controls.target.distanceTo(homeControlsTarget) < 0.01) { camera.position.copy(homeCameraPosition); controls.target.copy(homeControlsTarget); isReturningToHomeView = false; } } controls.update(); renderer.render(scene, camera); }
+function animate() { requestAnimationFrame(animate); if (isReturningToHomeView) { camera.position.lerp(homeCameraPosition, 0.1); controls.target.lerp(homeControlsTarget, 0.1); if (camera.position.distanceTo(homeCameraPosition) < 0.01 && controls.target.distanceTo(homeControlsTarget) < 0.01) { camera.position.copy(homeCameraPosition); controls.target.copy(homeControlsTarget); isReturningToHomeView = false; controls.enabled = true; } } controls.update(); renderer.render(scene, camera); }
 
 function saveState() {
   if (!currentGameConfig) return;
@@ -905,5 +905,5 @@ function onTouchEnd(event) {
     });
   }
   isDragging = false;
-  hidePreviews(); // Hide preview sphere after touch ends
+  
 }
